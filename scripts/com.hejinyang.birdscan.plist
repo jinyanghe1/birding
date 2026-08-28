@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.hejinyang.birdscan</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/hejinyang/.workbuddy/binaries/python/envs/birdskill/bin/python</string>
+        <string>/Users/hejinyang/WorkBuddy/观鸟skill/birdscan/cli.py</string>
+        <string>scan</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/hejinyang/WorkBuddy/观鸟skill</string>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>21</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/hejinyang/WorkBuddy/观鸟skill/logs/scan_daily.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/hejinyang/WorkBuddy/观鸟skill/logs/scan_daily.error.log</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

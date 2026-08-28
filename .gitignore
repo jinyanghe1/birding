@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+
+# 数据与模型（不上传）
+data/
+models/
+
+# 日志
+logs/
+
+# 环境配置（防误传 key）
+.env
+*.local
+
+# 系统
+.DS_Store
+
+# 导出产物（太大，不推仓库）
+data/export_site/

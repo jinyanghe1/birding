@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>我的观鸟档案</title>
+<style>
+:root{
+  --bg:#14161a; --panel:#1c1f26; --panel2:#22262f; --line:#2e333d;
+  --tx:#e6e8ec; --tx2:#9aa2b0; --tx3:#6b7382;
+  --teal:#3fbfa0; --amber:#e8a33d; --red:#e2585a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);
+  font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+a{color:var(--teal);text-decoration:none}
+.wrap{max-width:1280px;margin:0 auto;padding:24px 20px 60px}
+h1{font-size:20px;font-weight:500;margin:0}
+h2{font-size:15px;font-weight:500;margin:0 0 14px;color:var(--tx)}
+h3{font-size:13px;font-weight:500;margin:0 0 10px;color:var(--tx2)}
+.muted{color:var(--tx2)}.tiny{font-size:12px;color:var(--tx3)}
+
+header{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+header .sp{flex:1}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:20px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.stat .n{font-size:24px;font-weight:500;line-height:1.2}
+.stat .l{font-size:12px;color:var(--tx3)}
+
+.tabs{display:flex;gap:4px;margin-bottom:18px;border-bottom:1px solid var(--line)}
+.tab{padding:8px 14px;cursor:pointer;color:var(--tx2);border-bottom:2px solid transparent;font-size:13px}
+.tab.on{color:var(--tx);border-bottom-color:var(--teal)}
+.tab:hover{color:var(--tx)}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;
+  cursor:pointer;transition:border-color .15s}
+.card:hover{border-color:var(--teal)}
+.card .ph{width:100%;aspect-ratio:4/3;object-fit:cover;background:var(--panel2);display:block}
+.card .ph.empty{display:flex;align-items:center;justify-content:center;color:var(--tx3);font-size:12px}
+.card .bd{padding:10px 12px 12px}
+.card .nm{font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .sc{font-size:11px;color:var(--tx3);font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .ft{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:var(--tx3)}
+.badge{background:rgba(63,191,160,.14);color:var(--teal);padding:1px 7px;border-radius:20px;font-size:11px}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+.viz{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px}
+
+.cal{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);gap:2px;overflow-x:auto;padding-bottom:4px}
+.cal i{width:11px;height:11px;border-radius:2px;background:#232730;display:block}
+.cal i.d{background:transparent}
+.lg{display:flex;align-items:center;gap:5px;margin-top:10px;font-size:11px;color:var(--tx3)}
+.lg i{width:10px;height:10px;border-radius:2px;display:block}
+
+.bar{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px}
+.bar .nm{width:130px;text-align:right;color:var(--tx2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .tk{flex:1;height:14px;background:var(--panel2);border-radius:3px;overflow:hidden}
+.bar .fl{height:100%;background:var(--teal);border-radius:3px}
+.bar .vl{width:56px;color:var(--tx3);font-size:11px}
+
+.hr{display:flex;align-items:flex-end;gap:2px;height:70px}
+.hr div{flex:1;background:var(--amber);border-radius:2px 2px 0 0;min-height:2px}
+.hrl{display:flex;gap:2px;margin-top:4px;font-size:10px;color:var(--tx3)}
+.hrl span{flex:1;text-align:center}
+
+input,select{background:var(--panel2);border:1px solid var(--line);color:var(--tx);
+  border-radius:7px;padding:7px 10px;font-size:13px;font-family:inherit}
+input:focus,select:focus{outline:none;border-color:var(--teal)}
+input{flex:1;max-width:280px}
+
+#mask{position:absolute;inset:0;background:rgba(0,0,0,.6);display:none;z-index:40}
+#modal{display:none;position:absolute;top:40px;left:50%;transform:translateX(-50%);
+  width:min(920px,94vw);max-height:84vh;overflow:auto;background:var(--panel);
+  border:1px solid var(--line);border-radius:14px;z-index:50;padding:20px}
+#modal .x{position:sticky;top:0;float:right;cursor:pointer;color:var(--tx2);font-size:20px;line-height:1}
+.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:12px 0}
+.gal img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;background:var(--panel2);cursor:zoom-in}
+.obs{border-top:1px solid var(--line);padding:9px 0;font-size:13px}
+.obs:first-of-type{border-top:none}
+.obs .d{color:var(--amber);font-variant-numeric:tabular-nums}
+.obs .p{color:var(--tx2)}
+.obs .n{color:var(--tx3);font-size:12px}
+.empty{text-align:center;padding:50px 20px;color:var(--tx3)}
+
+/* ---------------- 地图（Apple Photos 风格） */
+#mapPane{position:relative}
+#map{height:min(66vh,640px);border-radius:12px;border:1px solid var(--line);z-index:1}
+#cellPanel{position:absolute;top:12px;right:12px;width:280px;max-height:calc(100% - 24px);
+  overflow:auto;background:rgba(28,31,38,.94);border:1px solid var(--line);border-radius:12px;
+  padding:14px;z-index:20;display:none;backdrop-filter:blur(8px)}
+#cellPanel h3{margin:0 0 8px}
+#cellPanel .close{float:right;cursor:pointer;color:var(--tx2);font-size:18px;line-height:1}
+.cellItem{display:flex;gap:10px;padding:7px 0;border-top:1px solid var(--line);cursor:pointer}
+.cellItem:first-of-type{border-top:none}
+.cellItem img{width:52px;height:52px;border-radius:7px;object-fit:cover;background:var(--panel2);flex:none}
+.cellItem .t{font-size:13px}
+.cellItem .m{font-size:11px;color:var(--tx3)}
+.pin{background:rgba(63,191,160,.92);color:#06231c;border-radius:50%;display:flex;
+  align-items:center;justify-content:center;font:500 12px/1 -apple-system,sans-serif;
+  border:2px solid rgba(255,255,255,.75);box-shadow:0 2px 8px rgba(0,0,0,.5);text-align:center}
+.leaflet-container{background:#14161a;font:inherit}
+.leaflet-control-attribution{background:rgba(20,22,26,.7)!important;color:var(--tx3)!important;font-size:10px}
+.leaflet-control-attribution a{color:var(--tx2)}
+.leaflet-bar a{background:var(--panel)!important;color:var(--tx)!important;border-color:var(--line)!important}
+.mspec{background:rgba(232,163,61,.92)}
+.meta{font-size:12.5px;color:var(--tx2);line-height:1.7;margin:10px 0}
+.ext{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+.ext a{background:var(--panel2);border:1px solid var(--line);border-radius:7px;
+  padding:4px 10px;font-size:12px;color:var(--teal)}
+.ext a:hover{border-color:var(--teal)}
+.prot{background:rgba(226,88,90,.15);color:var(--red);padding:2px 8px;border-radius:6px;font-size:11px}
+
+/* ---------------- 加新上传弹窗 */
+#addBtn{background:var(--teal);color:#0d1a17;border:0;border-radius:8px;
+  padding:8px 16px;font:500 13px inherit;cursor:pointer;white-space:nowrap}
+#addBtn:hover{filter:brightness(1.1)}
+#addModal{display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:min(460px,92vw);background:var(--panel);border:1px solid var(--line);
+  border-radius:14px;z-index:60;padding:22px}
+#addModal h2{margin:0 0 14px}
+#addModal .row{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+#addModal label{font-size:12px;color:var(--tx2)}
+#addModal input[type=file]{padding:20px;border:1.5px dashed var(--line);border-radius:10px;
+  background:var(--panel2);cursor:pointer;font-size:13px}
+#addModal .act{display:flex;gap:8px;margin-top:16px}
+#addModal .act button{flex:1;padding:9px;border-radius:8px;border:1px solid var(--line);
+  background:var(--panel2);color:var(--tx);font:500 13px inherit;cursor:pointer}
+#addModal .act button.primary{background:var(--teal);color:#0d1a17;border:0}
+#addModal .act button:disabled{opacity:.5;cursor:not-allowed}
+#addResult{margin-top:14px;font-size:13px;line-height:1.6;display:none}
+#addResult.ok{color:var(--teal)} #addResult.err{color:var(--red)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>我的观鸟档案</h1>
+    <span class="sp"></span>
+    <input id="q" placeholder="搜索鸟名 / 学名 / 科" autocomplete="off">
+    <select id="ord">
+      <option value="count">按观测次数</option>
+      <option value="recent">按最近观测</option>
+      <option value="name">按名称</option>
+    </select>
+    <select id="mc" title="只显示置信度不低于此值的识别结果">
+      <option value="0.45">置信度 ≥45%（推荐）</option>
+      <option value="0.70">置信度 ≥70%（更严）</option>
+      <option value="0.25">置信度 ≥25%</option>
+      <option value="0">全部（含噪声）</option>
+    </select>
+    <button id="addBtn" onclick="$('#addModal').style.display='block'">＋ 加新</button>
+  </header>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="tabs">
+    <div class="tab on" data-t="wall">物种墙</div>
+    <div class="tab" data-t="map">地图</div>
+    <div class="tab" data-t="viz">可视化</div>
+    <div class="tab" data-t="run">扫描与识别</div>
+  </div>
+
+  <div id="wall"><div class="grid" id="grid"></div></div>
+
+  <div id="mapPane" style="display:none">
+    <div id="map"></div>
+    <div id="cellPanel"></div>
+  </div>
+
+  <div id="viz" style="display:none">
+    <div class="viz">
+      <div class="panel">
+        <h2>观测热力日历</h2>
+        <h3 id="calY"></h3>
+        <div class="cal" id="cal"></div>
+        <div class="lg"><span>少</span>
+          <i style="background:#232730"></i><i style="background:#1e5a4c"></i>
+          <i style="background:#2a8a72"></i><i style="background:#3fbfa0"></i>
+          <span>多</span>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>累计种数增长</h2>
+        <h3>&nbsp;</h3>
+        <div id="tl"></div>
+      </div>
+    </div>
+    <div class="viz" style="margin-top:16px">
+      <div class="panel"><h2>观测地点 Top</h2><div id="pl"></div></div>
+      <div class="panel"><h2>时段分布</h2><div id="hr"></div></div>
+    </div>
+  </div>
+
+  <div id="run" style="display:none">
+    <div class="panel">
+      <h2>手动扫描</h2>
+      <p class="tiny">扫描照片库并挑出候选照片进入识别队列。全库首次扫描约需 10–20 分钟。</p>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+        <input id="lim" type="number" placeholder="限制张数（留空=全部）" style="max-width:200px">
+        <label class="tiny"><input type="checkbox" id="frc" style="max-width:auto"> 忽略水位线重扫</label>
+        <button id="btnScan" style="background:var(--teal);color:#0d1a17;border:0;
+          border-radius:7px;padding:8px 16px;font:500 13px inherit;cursor:pointer">开始扫描</button>
+      </div>
+      <pre id="scanOut" class="tiny" style="white-space:pre-wrap;margin-top:12px;display:none"></pre>
+    </div>
+    <div class="panel">
+      <h2>识别队列</h2>
+      <p class="tiny">队列里的照片需要交给 AI 识别。在对话里说「继续识别下一批」，或复制提示词。</p>
+      <div id="qlist" class="tiny"></div>
+    </div>
+  </div>
+</div>
+
+<div id="mask"></div>
+<div id="modal"></div>
+
+<div id="addModal">
+  <h2>加新</h2>
+  <div class="row">
+    <label>图片或视频（JPG/PNG/HEIC/WebP/MP4/MOV，最大 200MB）</label>
+    <input type="file" id="addFile" accept="image/*,video/*">
+  </div>
+  <div class="row">
+    <label>拍摄时间（留空用今天）</label>
+    <input type="datetime-local" id="addTime">
+  </div>
+  <div class="row">
+    <label>地点（可选）</label>
+    <input id="addPlace" placeholder="例如：深圳湾公园">
+  </div>
+  <div class="act">
+    <button onclick="closeAdd()">取消</button>
+    <button class="primary" id="addGo" onclick="doAdd()">上传并识别</button>
+  </div>
+  <div id="addResult"></div>
+</div>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const imgUrl = p => p ? '/img?path=' + encodeURIComponent(p) : '';
+let ALL = [];
+
+// ---------------------------------------------------------------- 加载
+const mc = () => $('#mc').value;
+
+async function load(){
+  const [st, sp] = await Promise.all([
+    fetch('/api/stats?min_conf='+mc()).then(r=>r.json()),
+    fetch('/api/species?min_conf='+mc()+'&order='+$('#ord').value
+          +'&search='+encodeURIComponent($('#q').value)).then(r=>r.json())
+  ]);
+  $('#stats').innerHTML = [
+    ['鸟种', st.species_confident ?? st.species],
+    ['观测次数', st.observations_confident ?? st.observations],
+    ['地点', st.places_confident ?? st.places],
+    ['照片', st.photos],
+    ['待复核', st.needs_review ?? 0]
+  ].map(([l,n])=>`<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
+
+  ALL = sp;
+  const g = $('#grid');
+  if(!sp.length){
+    g.innerHTML = `<div class="empty">还没有观测记录。<br>去「扫描与识别」标签页跑一次扫描。</div>`;
+    return;
+  }
+  g.innerHTML = sp.map(s=>{
+    const src = s.thumb || s.img;
+    return `<div class="card" data-id="${s.id}">
+      ${src ? `<img class="ph" loading="lazy" src="${imgUrl(src)}" onerror="this.className='ph empty';this.textContent='无图'">`
+            : `<div class="ph empty">无图</div>`}
+      <div class="bd">
+        <div class="nm" title="${esc(s.common_name_cn)}">${esc(s.common_name_cn)}</div>
+        <div class="sc">${esc(s.scientific_name||'')}</div>
+        <div class="ft"><span class="badge">${s.cnt} 次</span>
+          <span>${esc((s.last_date||'').slice(5))}</span></div>
+      </div></div>`;
+  }).join('');
+  g.querySelectorAll('.card').forEach(c=>c.onclick=()=>openSpecies(c.dataset.id));
+}
+
+// ---------------------------------------------------------------- 详情
+async function openSpecies(id){
+  const d = await fetch('/api/species/'+id).then(r=>r.json());
+  const s = d.species;
+  const photos = d.observations.flatMap(o=>(o.photos||[]).map(p=>({p,o})));
+  $('#modal').innerHTML = `
+    <span class="x" onclick="closeM()">&times;</span>
+    <h1>${esc(s.common_name_cn)}</h1>
+    <div class="tiny" style="font-style:italic">${esc(s.scientific_name||'')}</div>
+    <div class="tiny" style="margin-top:6px">
+      ${[s.order_cn, s.family_cn].filter(Boolean).map(esc).join(' · ')}
+      ${s.iucn_status?` · IUCN ${esc(s.iucn_status)}`:''}
+      ${s.china_protection?`<span class="prot">国家${esc(s.china_protection)}保护</span>`:''}
+    </div>
+    ${s.summary?`<div class="meta">${esc(s.summary)}</div>`:''}
+    ${extLinksHtml(s.links_json)}
+    <div style="margin:12px 0" class="tiny">共 <b style="color:var(--amber)">${d.count}</b> 次观测
+      ${d.places.length? ' · 地点：'+d.places.slice(0,6).map(esc).join('、'):''}</div>
+    ${photos.length?`<div class="gal">${photos.slice(0,24).map(x=>
+      `<img loading="lazy" src="${imgUrl(x.p.thumb_cache||x.p.image_path)}"
+        title="${esc(x.o.obs_date)} ${esc(x.o.place_name||'')}" onclick="window.open(this.src)">`).join('')}</div>`:''}
+    <h2 style="margin-top:18px">观测记录</h2>
+    ${d.observations.map(o=>`<div class="obs">
+      <span class="d">${esc(o.obs_date)}</span>
+      <span class="p">${esc(o.place_name||'（无地点）')}</span>
+      ${o.confidence!=null?`<span class="tiny"> 置信度 ${(o.confidence*100).toFixed(0)}%</span>`:''}
+      ${o.notes?`<div class="n">${esc(o.notes)}</div>`:''}
+    </div>`).join('')}`;
+  $('#modal').style.display='block'; $('#mask').style.display='block';
+}
+function extLinksHtml(lj){
+  if(!lj) return '';
+  let links; try{ links = JSON.parse(lj);}catch(e){ return ''; }
+  const ks = Object.keys(links);
+  if(!ks.length) return '';
+  return `<div class="ext">${ks.map(k=>
+    `<a href="${links[k]}" target="_blank" rel="noopener">${esc(k)} ↗</a>`).join('')}</div>`;
+}
+function closeM(){ $('#modal').style.display='none'; $('#mask').style.display='none'; }
+$('#mask').onclick = closeM;
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeM(); });
+
+// ---------------------------------------------------------------- 可视化
+async function loadViz(){
+  const y = new Date().getFullYear();
+  const m = 'min_conf='+mc();
+  const [cal, tl, pl, hr] = await Promise.all([
+    fetch('/api/calendar?year='+y+'&'+m).then(r=>r.json()),
+    fetch('/api/timeline?'+m).then(r=>r.json()),
+    fetch('/api/places?limit=12&'+m).then(r=>r.json()),
+    fetch('/api/hours?'+m).then(r=>r.json()),
+  ]);
+
+  // 热力日历
+  $('#calY').textContent = y + ' 年';
+  const map = {}; cal.days.forEach(d=>map[d.date]=d.count);
+  const jan1 = new Date(y,0,1); const off = jan1.getDay();
+  let cells = '';
+  for(let i=0;i<off;i++) cells += '<i class="d"></i>';
+  for(let d=new Date(y,0,1); d.getFullYear()===y; d.setDate(d.getDate()+1)){
+    const iso = d.toISOString().slice(0,10);
+    const c = map[iso]||0;
+    const bg = c===0?'#232730': c===1?'#1e5a4c': c===2?'#2a8a72':'#3fbfa0';
+    cells += `<i style="background:${bg}" title="${iso}: ${c} 次"></i>`;
+  }
+  $('#cal').innerHTML = cells;
+
+  // 累计增长曲线
+  if(tl.length){
+    const W=380,H=150,P=26;
+    const maxN = tl[tl.length-1].cumulative||1;
+    const t0 = new Date(tl[0].date).getTime(), t1 = new Date(tl[tl.length-1].date).getTime()||t0+1;
+    const pts = tl.map(p=>{
+      const x = P + (new Date(p.date).getTime()-t0)/(t1-t0)*(W-2*P);
+      const yy = H-P - p.cumulative/maxN*(H-2*P);
+      return `${x.toFixed(1)},${yy.toFixed(1)}`;
+    }).join(' ');
+    $('#tl').innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="150">
+      <polyline points="${pts}" fill="none" stroke="#3fbfa0" stroke-width="1.8"/>
+      <text x="${P}" y="14" fill="#6b7382" font-size="10">${maxN} 种</text>
+      <text x="${P}" y="${H-6}" fill="#6b7382" font-size="10">${esc(tl[0].date)}</text>
+      <text x="${W-P}" y="${H-6}" fill="#6b7382" font-size="10" text-anchor="end">${esc(tl[tl.length-1].date)}</text>
+    </svg>`;
+  } else $('#tl').innerHTML = '<div class="tiny">暂无数据</div>';
+
+  // 地点
+  const mx = Math.max(1, ...pl.map(p=>p.c));
+  $('#pl').innerHTML = pl.length ? pl.map(p=>`<div class="bar">
+      <span class="nm" title="${esc(p.place_name)}">${esc(p.place_name)}</span>
+      <span class="tk"><span class="fl" style="width:${p.c/mx*100}%"></span></span>
+      <span class="vl">${p.c}次/${p.sp}种</span></div>`).join('')
+    : '<div class="tiny">暂无地点数据</div>';
+
+  // 时段
+  const mh = Math.max(1, ...hr);
+  $('#hr').innerHTML = `<div class="hr">${hr.map((v,i)=>
+    `<div style="height:${v/mh*100}%" title="${i}点: ${v} 次"></div>`).join('')}</div>
+    <div class="hrl">${hr.map((v,i)=>`<span>${i%3===0?i:''}</span>`).join('')}</div>`;
+}
+
+// ---------------------------------------------------------------- 扫描
+$('#btnScan').onclick = async ()=>{
+  const lim = $('#lim').value ? '&limit='+$('#lim').value : '';
+  const frc = $('#frc').checked ? '&force=true' : '';
+  $('#scanOut').style.display='block';
+  $('#scanOut').textContent = '扫描中…（全库可能需要十几分钟，请不要关闭页面）';
+  $('#btnScan').disabled = true;
+  try{
+    const r = await fetch('/api/scan'+'?'+ (lim+frc).replace(/^&/,'') , {method:'POST'});
+    const j = await r.json();
+    $('#scanOut').textContent = JSON.stringify(j, null, 2);
+    load();
+  }catch(e){ $('#scanOut').textContent = '失败：'+e; }
+  $('#btnScan').disabled = false;
+};
+
+async function loadQueue(){
+  const q = await fetch('/api/queue?limit=24').then(r=>r.json());
+  $('#qlist').innerHTML = q.length
+    ? `<div>待识别 <b style="color:var(--amber)">${q.length}</b> 张（最多显示 24）</div>` +
+      q.map(x=>`<div style="margin-top:4px">· ${esc(x.shot_at||'').slice(0,10)}
+        ${esc(x.place_name||'')} <span style="color:var(--tx3)">${esc(x.asset_uuid.slice(0,8))}</span></div>`).join('')
+    : '<div>队列为空。跑一次扫描，或在对话里说「继续识别」。</div>';
+}
+
+// ---------------------------------------------------------------- 地图
+let MAP = null, MAP_LAYER = null, MAP_LOAD_TOKEN = 0;
+
+function initMap(){
+  if(MAP) return;
+  MAP = L.map('map', {zoomControl:true, attributionControl:true, worldCopyJump:true});
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution:'&copy; OpenStreetMap &copy; CARTO',
+    maxZoom:18, subdomains:'abcd'
+  }).addTo(MAP);
+  MAP_LAYER = L.layerGroup().addTo(MAP);
+  MAP.on('zoomend moveend', loadMap);
+  MAP.setView([34, 108], 4);
+  loadMap();
+}
+
+async function loadMap(){
+  if(!MAP) return;
+  const token = ++MAP_LOAD_TOKEN;
+  const b = MAP.getBounds();
+  const z = Math.max(2, Math.min(9, MAP.getZoom()));
+  const url = `/api/map?zoom=${z}&min_conf=${mc()}`
+    + `&sw_lat=${b.getSouth().toFixed(4)}&sw_lon=${b.getWest().toFixed(4)}`
+    + `&ne_lat=${b.getNorth().toFixed(4)}&ne_lon=${b.getEast().toFixed(4)}`;
+  const pts = await fetch(url).then(r=>r.json()).catch(()=>[]);
+  if(token !== MAP_LOAD_TOKEN) return;   // 过期响应丢弃
+  MAP_LAYER.clearLayers();
+  const maxN = Math.max(1, ...pts.map(p=>p.n));
+  pts.forEach(p=>{
+    const big = p.n >= Math.max(4, maxN*0.4);
+    const size = big? 46 : p.n>1? 38 : 30;
+    const icon = L.divIcon({
+      className:'',
+      html:`<div class="pin ${big?'mspec':''}" style="width:${size}px;height:${size}px">
+              ${p.thumb?`<img src="${imgUrl(p.thumb)}" style="width:${size-8}px;height:${size-8}px;border-radius:50%;object-fit:cover;position:absolute;left:4px;top:4px">`:''}
+              <span style="position:relative">${p.n>1?p.n:''}</span>
+            </div>`,
+      iconSize:[size,size], iconAnchor:[size/2,size/2]
+    });
+    const m = L.marker([p.lat,p.lon], {icon}).addTo(MAP_LAYER);
+    m.on('click', ()=>openCell(p, z));
+  });
+  if(!MAP._fit_done && pts.length){
+    MAP._fit_done = true;
+    MAP.fitBounds(L.latLngBounds(pts.map(p=>[p.lat,p.lon])).pad(0.25), {animate:false});
+  }
+}
+
+async function openCell(p, z){
+  const panel = $('#cellPanel');
+  panel.style.display='block';
+  panel.innerHTML = `<h3>${esc(p.top_species||'观测点')} <span class="close" onclick="$('#cellPanel').style.display='none'">&times;</span></h3>
+    <div class="m">${p.n} 次观测 · ${p.sp} 种 · 最近 ${esc((p.last_date||'').slice(0,10))}</div>
+    <div class="tiny">加载中…</div>`;
+  const items = await fetch(`/api/map/cell?lat=${p.lat}&lon=${p.lon}&zoom=${z+2}&min_conf=${mc()}`)
+    .then(r=>r.json()).catch(()=>[]);
+  if(!items.length){
+    panel.querySelector('.tiny').textContent = '该网格内没有更多记录';
+    return;
+  }
+  panel.innerHTML = `<h3>${esc(p.top_species||'观测点')} <span class="close" onclick="$('#cellPanel').style.display='none'">&times;</span></h3>
+    <div class="m">${p.n} 次观测 · ${p.sp} 种</div>`
+    + items.map(c=>`<div class="cellItem" onclick="openSpecies(${c.species_id})">
+      ${c.thumb?`<img src="${imgUrl(c.thumb)}">`:`<div style="width:52px;height:52px;border-radius:7px;background:var(--panel2)"></div>`}
+      <div><div class="t">${esc(c.common_name_cn)}</div>
+        <div class="m">${esc(c.obs_date)} · ${(c.confidence*100).toFixed(0)}%${c.place_name?' · '+esc(c.place_name.split(',')[0]):''}</div></div>
+    </div>`).join('');
+}
+
+function closeAdd(){
+  $('#addModal').style.display='none';
+  $('#addFile').value=''; $('#addTime').value=''; $('#addPlace').value='';
+  $('#addResult').style.display='none';
+}
+
+async function doAdd(){
+  const f = $('#addFile').files[0];
+  if(!f){ showAdd('请先选择文件', false); return; }
+  const btn = $('#addGo');
+  btn.disabled = true; btn.textContent = '识别中…';
+  const fd = new FormData();
+  fd.append('file', f);
+  fd.append('taken_at', $('#addTime').value.replace('T',' '));
+  fd.append('place_name', $('#addPlace').value);
+  try{
+    const r = await fetch('/api/upload', {method:'POST', body:fd});
+    const j = await r.json();
+    if(!j.ok){ showAdd('识别失败：'+(j.error||'未知'), false); btn.disabled=false; btn.textContent='上传并识别'; return; }
+    const isNew = j.is_new ? '新鸟种！' : '老朋友，';
+    showAdd(`✓ ${isNew}识别为「${j.common_name_cn}」（${j.confidence}%），累计 ${j.total_obs} 次观测`, true);
+    btn.textContent='完成';
+    setTimeout(()=>{ closeAdd(); load(); }, 1200);
+  }catch(e){
+    showAdd('请求失败：'+e, false);
+    btn.disabled=false; btn.textContent='上传并识别';
+  }
+}
+function showAdd(msg, ok){
+  const el = $('#addResult');
+  el.textContent = msg;
+  el.className = ok ? 'ok' : 'err';
+  el.style.display = 'block';
+}
+
+// ---------------------------------------------------------------- 事件
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  t.classList.add('on');
+  const v = t.dataset.t;
+  ['wall','mapPane','viz','run'].forEach(k=>$('#'+k).style.display = k===v?'block':'none');
+  if(v==='map'){ initMap(); setTimeout(()=>MAP&&MAP.invalidateSize(), 60); }
+  if(v==='viz') loadViz();
+  if(v==='run') loadQueue();
+});
+let tm; $('#q').oninput = ()=>{ clearTimeout(tm); tm=setTimeout(load, 250); };
+$('#ord').onchange = load;
+$('#mc').onchange = ()=>{ load(); if($('#viz').style.display!=='none') loadViz();
+  if(MAP){ MAP._fit_done=false; loadMap(); } };
+
+load();
+</script>
+</body>
+</html>

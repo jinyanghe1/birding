@@ -85,8 +85,8 @@ input{flex:1;max-width:280px}
 .empty{text-align:center;padding:50px 20px;color:var(--tx3)}
 
 /* ---------------- 地图（Apple Photos 风格） */
-#mapPane{position:relative}
-#map{height:min(66vh,640px);border-radius:12px;border:1px solid var(--line);z-index:1}
+#map{position:relative}
+#mapContainer{height:min(66vh,640px);border-radius:12px;border:1px solid var(--line);z-index:1}
 #cellPanel{position:absolute;top:12px;right:12px;width:280px;max-height:calc(100% - 24px);
   overflow:auto;background:rgba(28,31,38,.94);border:1px solid var(--line);border-radius:12px;
   padding:14px;z-index:20;display:none;backdrop-filter:blur(8px)}
@@ -184,8 +184,8 @@ input{flex:1;max-width:280px}
 
   <div id="wall"><div class="grid" id="grid"></div></div>
 
-  <div id="mapPane" style="display:none">
-    <div id="map"></div>
+  <div id="map" style="display:none">
+    <div id="mapContainer"></div>
     <div id="cellPanel"></div>
   </div>
 
@@ -193,7 +193,13 @@ input{flex:1;max-width:280px}
     <div class="viz">
       <div class="panel">
         <h2>观测热力日历</h2>
-        <h3 id="calY"></h3>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+          <button id="calPrev" style="padding:4px 10px;border-radius:6px;border:1px solid var(--line);
+            background:var(--panel2);color:var(--tx);font:12px inherit;cursor:pointer">← 上月</button>
+          <h3 id="calY" style="margin:0;flex:1;text-align:center"></h3>
+          <button id="calNext" style="padding:4px 10px;border-radius:6px;border:1px solid var(--line);
+            background:var(--panel2);color:var(--tx);font:12px inherit;cursor:pointer">下月 →</button>
+        </div>
         <div class="cal" id="cal"></div>
         <div class="lg"><span>少</span>
           <i style="background:#232730"></i><i style="background:#1e5a4c"></i>
@@ -223,6 +229,15 @@ input{flex:1;max-width:280px}
   <div id="rec" style="display:none">
     <div class="panel">
       <h2>推荐清单</h2>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <select id="recNameType" style="padding:6px 10px;border-radius:6px;border:1px solid var(--line);
+          background:var(--panel2);color:var(--tx);font:12px inherit">
+          <option value="cn">中文学名</option>
+          <option value="cn_com">中文俗称</option>
+          <option value="en">英文学名</option>
+          <option value="en_com">英文俗称</option>
+        </select>
+      </div>
       <p class="tiny">北京观鸟者最近 30 天最常看到的鸟种（eBird 社区数据），减去你已看过的。按社区观测次数排序。</p>
       <div id="recList"></div>
     </div>
@@ -429,19 +444,34 @@ async function loadViz(){
     fetch(API('hours')).then(r=>r.json()),
   ]);
 
-  // 热力日历
-  $('#calY').textContent = y + ' 年';
-  const map = {}; cal.days.forEach(d=>map[d.date]=d.count);
-  const jan1 = new Date(y,0,1); const off = jan1.getDay();
-  let cells = '';
-  for(let i=0;i<off;i++) cells += '<i class="d"></i>';
-  for(let d=new Date(y,0,1); d.getFullYear()===y; d.setDate(d.getDate()+1)){
-    const iso = d.toISOString().slice(0,10);
-    const c = map[iso]||0;
-    const bg = c===0?'#232730': c===1?'#1e5a4c': c===2?'#2a8a72':'#3fbfa0';
-    cells += `<i style="background:${bg}" title="${iso}: ${c} 次"></i>`;
+  // 热力日历（按月翻页）
+  let calYear = new Date().getFullYear();
+  let calMonth = new Date().getMonth() + 1;
+  function renderCal(){
+    $('#calY').textContent = `${calYear} 年 ${calMonth} 月`;
+    const map = {}; cal.days.forEach(d=>map[d.date]=d.count);
+    const first = new Date(calYear, calMonth-1, 1);
+    const last = new Date(calYear, calMonth, 0);
+    const off = first.getDay();
+    let cells = '';
+    for(let i=0;i<off;i++) cells += '<i class="d"></i>';
+    for(let d=new Date(first); d<=last; d.setDate(d.getDate()+1)){
+      const iso = d.toISOString().slice(0,10);
+      const c = map[iso]||0;
+      const bg = c===0?'#232730': c===1?'#1e5a4c': c===2?'#2a8a72':'#3fbfa0';
+      cells += `<i style="background:${bg}" title="${iso}: ${c} 次"></i>`;
+    }
+    $('#cal').innerHTML = cells;
   }
-  $('#cal').innerHTML = cells;
+  $('#calPrev').onclick = ()=>{
+    calMonth--; if(calMonth<1){ calMonth=12; calYear--; }
+    renderCal();
+  };
+  $('#calNext').onclick = ()=>{
+    calMonth++; if(calMonth>12){ calMonth=1; calYear++; }
+    renderCal();
+  };
+  renderCal();
 
   // 累计增长曲线
   if(tl.length){
@@ -535,17 +565,23 @@ async function loadRecommendations(){
     $('#recList').innerHTML = '<div class="empty">暂无推荐（社区数据加载失败或你已看过所有鸟种）。</div>';
     return;
   }
+  const nameType = $('#recNameType').value;
   $('#recList').innerHTML = rec.map(r=>{
     const priority = r.priority === 'high' ? '🔥' : '·';
+    const name = nameType === 'cn' ? r.species
+      : nameType === 'cn_com' ? (r.species || r.species_en)
+      : nameType === 'en' ? r.sciName
+      : r.species_en;
     return `<div class="reviewItem">
       <div class="info">
-        <div class="nm">${priority} ${esc(r.species)} <span class="conf">社区 ${r.community_count} 次</span></div>
+        <div class="nm">${priority} ${esc(name)} <span class="conf">社区 ${r.community_count} 次</span></div>
         <div class="meta">${esc(r.sciName||'')} · ${r.locations.map(esc).join('、')}</div>
         <div class="meta" style="color:var(--tx3)">最近观测：${r.dates.map(esc).join('、')}</div>
       </div>
     </div>`;
   }).join('');
 }
+$('#recNameType').onchange = loadRecommendations;
 
 async function loadReview(){
   if(STATIC_MODE){
@@ -625,7 +661,7 @@ let MAP = null, MAP_LAYER = null, MAP_LOAD_TOKEN = 0;
 function initMap(){
   if(MAP){ MAP.invalidateSize(); return; }
   // Leaflet 在 display:none 的容器里初始化会失效，所以必须先显示再初始化
-  MAP = L.map('map', {zoomControl:true, attributionControl:true, worldCopyJump:true});
+  MAP = L.map('mapContainer', {zoomControl:true, attributionControl:true, worldCopyJump:true});
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     attribution:'&copy; OpenStreetMap &copy; CARTO',
     maxZoom:18, subdomains:'abcd'
@@ -741,7 +777,7 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
   t.classList.add('on');
   const v = t.dataset.t;
-  ['wall','mapPane','viz','rec','review','run'].forEach(k=>$('#'+k).style.display = k===v?'block':'none');
+  ['wall','map','viz','rec','review','run'].forEach(k=>$('#'+k).style.display = k===v?'block':'none');
   if(v==='map'){ initMap(); setTimeout(()=>MAP&&MAP.invalidateSize(), 60); }
   if(v==='viz') loadViz();
   if(v==='rec') loadRecommendations();

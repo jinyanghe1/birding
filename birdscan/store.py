@@ -488,7 +488,14 @@ def get_species_list(order: str = "count", limit: int = 200, search: str = "",
       LIMIT ?
     """
     with conn_ctx(readonly=True) as con:
-        return [dict(r) for r in con.execute(sql, args + [mc, mc, mc, limit]).fetchall()]
+        rows = [dict(r) for r in con.execute(sql, args + [mc, mc, mc, limit]).fetchall()]
+    # 把绝对路径替换为相对路径（thumbs/xxx.jpg），前端才能加载
+    for r in rows:
+        for k in ("thumb", "img"):
+            p = r.get(k)
+            if p and str(config.THUMB_DIR) in p:
+                r[k] = "thumbs/" + Path(p).name
+    return rows
 
 
 def get_species_detail(species_id: int) -> dict | None:
@@ -638,7 +645,13 @@ def get_map_points(zoom: int = 3, min_conf: float | None = None,
               + [mc]                  # top_species 子查询 conf
               + args)                 # WHERE 的 mc（+ 可选视口）
     with conn_ctx(readonly=True) as con:
-        return [dict(r) for r in con.execute(sql, params).fetchall()]
+        rows = [dict(r) for r in con.execute(sql, params).fetchall()]
+    # 把绝对路径替换为相对路径
+    for r in rows:
+        p = r.get("thumb")
+        if p and str(config.THUMB_DIR) in p:
+            r["thumb"] = "thumbs/" + Path(p).name
+    return rows
 
 
 def get_observations_at(lat: float, lon: float, cell_div: int = 4,

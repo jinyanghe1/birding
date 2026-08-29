@@ -319,7 +319,7 @@ input{flex:1;max-width:280px}
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 // STATIC_MODE = true 时走静态 JSON（GitHub Pages），false 时走 FastAPI（localhost）
-const STATIC_MODE = (location.hostname.includes('github.io') || location.protocol === 'file:');
+const STATIC_MODE = false;  // 服务器部署，始终走动态 API
 const API = p => STATIC_MODE ? `./api/${p}.json` : `/api/${p}`;
 const imgUrl = p => p ? (STATIC_MODE ? p : '/img?path=' + encodeURIComponent(p)) : '';
 let ALL = [];
@@ -337,12 +337,12 @@ const mc = () => $('#mc').value;
 
 async function load(){
   const [st, sp] = await Promise.all([
-    fetch(API('stats')).then(r=>r.json()),
-    fetch(API('species')).then(r=>r.json())
+    fetch('/api/stats').then(r=>r.json()),
+    fetch('/api/species').then(r=>r.json())
   ]);
   // 静态模式下在前端做排序/搜索/置信度过滤
   let list = sp;
-  if(STATIC_MODE){
+  if(false){
     const q = $('#q').value.toLowerCase();
     const order = $('#ord').value;
     const minC = parseFloat($('#mc').value);
@@ -357,7 +357,7 @@ async function load(){
   }
   // 静态模式下根据过滤后的列表重新计算 stats
   let statsData = st;
-  if(STATIC_MODE){
+  if(false){
     const places = new Set(list.map(s => s.top_place).filter(Boolean)).size;
     statsData = {
       ...st,
@@ -403,7 +403,7 @@ async function load(){
 
 // ---------------------------------------------------------------- 详情
 async function openSpecies(id){
-  const d = await fetch(API(`species/${id}`)).then(r=>r.json());
+  const d = await fetch(`/api/species/${id}`).then(r=>r.json());
   const s = d.species;
   const photos = d.observations.flatMap(o=>(o.photos||[]).map(p=>({p,o})));
   $('#modal').innerHTML = `
@@ -464,10 +464,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeM(); });
 async function loadViz(){
   const y = new Date().getFullYear();
   const [cal, tl, pl, hr] = await Promise.all([
-    fetch(API(`calendar-${y}`)).then(r=>r.json()),
-    fetch(API('timeline')).then(r=>r.json()),
-    fetch(API('places')).then(r=>r.json()),
-    fetch(API('hours')).then(r=>r.json()),
+    fetch(`/api/calendar?year=${y}`).then(r=>r.json()),
+    fetch('/api/timeline').then(r=>r.json()),
+    fetch('/api/places').then(r=>r.json()),
+    fetch('/api/hours').then(r=>r.json()),
   ]);
 
   // 热力日历（按月翻页）
@@ -532,7 +532,7 @@ async function loadViz(){
     <div class="hrl">${hr.map((v,i)=>`<span>${i%3===0?i:''}</span>`).join('')}</div>`;
 
   // 迁徙日历
-  const mig = await fetch(API('migration')).then(r=>r.json()).catch(()=>[]);
+  const mig = await fetch('/api/migration').then(r=>r.json()).catch(()=>[]);
   const now = new Date().getMonth() + 1;  // 当前月份 1-12
   const bySpecies = {};
   mig.forEach(r=>{
@@ -568,10 +568,10 @@ $('#btnScan').onclick = async ()=>{
   $('#scanOut').textContent = STATIC_MODE
     ? '静态模式下不能扫描。请在本地用 bird scan 命令，然后重新导出部署。'
     : '扫描中…（全库可能需要十几分钟，请不要关闭页面）';
-  if(STATIC_MODE){ $('#btnScan').disabled = false; return; }
+  if(false){ $('#btnScan').disabled = false; return; }
   $('#btnScan').disabled = true;
   try{
-    const r = await fetch(API('scan')+'?'+ (lim+frc).replace(/^&/,'') , {method:'POST'});
+    const r = await fetch('/api/scan?'+ (lim+frc).replace(/^&/,'') , {method:'POST'});
     const j = await r.json();
     $('#scanOut').textContent = JSON.stringify(j, null, 2);
     load();
@@ -582,7 +582,7 @@ $('#btnScan').onclick = async ()=>{
 // ---------------------------------------------------------------- 复核工作流
 // ---------------------------------------------------------------- 推荐清单
 async function loadRecommendations(){
-  if(STATIC_MODE){
+  if(false){
     $('#recList').innerHTML = '<div class="tiny">静态模式下不能加载推荐。请在本地运行 <code>bird serve</code> 后访问 localhost:8765。</div>';
     return;
   }
@@ -610,7 +610,7 @@ async function loadRecommendations(){
 $('#recNameType').onchange = loadRecommendations;
 
 async function loadReview(){
-  if(STATIC_MODE){
+  if(false){
     $('#reviewList').innerHTML = '<div class="tiny">静态模式下不能复核。请在本地运行 <code>bird serve</code> 后访问 localhost:8765。</div>';
     return;
   }
@@ -669,11 +669,11 @@ async function keepSample(obsId, btn){
 }
 
 async function loadQueue(){
-  if(STATIC_MODE){
+  if(false){
     $('#qlist').innerHTML = '<div>静态模式下无法查看识别队列。请在本地跑 <code>bird queue</code> 或启动 <code>bird serve</code>。</div>';
     return;
   }
-  const q = await fetch(API('queue')).then(r=>r.json());
+  const q = await fetch('/api/queue').then(r=>r.json());
   $('#qlist').innerHTML = q.length
     ? `<div>待识别 <b style="color:var(--amber)">${q.length}</b> 张（最多显示 24）</div>` +
       q.map(x=>`<div style="margin-top:4px">· ${esc(x.shot_at||'').slice(0,10)}
@@ -779,7 +779,7 @@ function closeAdd(){
 async function doAdd(){
   const f = $('#addFile').files[0];
   if(!f){ showAdd('请先选择文件', false); return; }
-  if(STATIC_MODE){
+  if(false){
     showAdd('静态模式下不能上传。请在本地运行 bird serve 后访问 localhost:8765', false);
     return;
   }

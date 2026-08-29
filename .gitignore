@@ -21,6 +21,3 @@ logs/
 
 # 导出产物（太大，不推仓库）
 data/export_site/
-
-# GitHub Pages 部署目录（含照片，不推代码仓库）
-docs/

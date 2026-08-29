@@ -99,6 +99,30 @@ def cmd_export_site(a) -> int:
     return 0
 
 
+def cmd_ebird(a) -> int:
+    """eBird 同步：导出 CSV 供手动上传，或提交 checklist。"""
+    from . import ebird
+    if a.action == "export":
+        p = ebird.export_csv(min_conf=a.min_conf)
+        print(f"已导出：{p}")
+        print(f"\n上传到 eBird：")
+        print(f"  1. 打开 https://ebird.org/import/upload.html")
+        print(f"  2. 下载官方模板核对列名")
+        print(f"  3. 上传 {p.name}")
+    elif a.action == "token":
+        token = a.token.strip()
+        if not token:
+            print("请提供 token：bird ebird token <your-token>")
+            return 1
+        from pathlib import Path
+        Path(config.DATA_DIR / ".ebird_token").write_text(token)
+        print("token 已保存")
+    elif a.action == "test":
+        r = ebird._req("https://api.ebird.org/v2/ref/region/list/country/world")
+        print("token 有效" if r else "token 无效或未设置")
+    return 0
+
+
 def cmd_merge(a) -> int:
     """合并同物种+同日+同地点簇的被拆散观测。"""
     from . import maintenance
@@ -285,6 +309,12 @@ def main(argv=None) -> int:
     s.add_argument("--min-conf", type=float, default=config.UI_MIN_CONF)
     s.add_argument("--no-thumbs", action="store_true")
     s.set_defaults(fn=cmd_export_site)
+
+    s = sub.add_parser("ebird", help="eBird 同步")
+    s.add_argument("action", choices=["export", "token", "test"])
+    s.add_argument("--token", default="", help="API token")
+    s.add_argument("--min-conf", type=float, default=0.45)
+    s.set_defaults(fn=cmd_ebird)
 
     s = sub.add_parser("merge-obs", help="合并被拆散的观测记录")
     s.add_argument("--dry-run", action="store_true", help="只统计不执行")

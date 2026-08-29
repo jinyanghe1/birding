@@ -24,7 +24,6 @@ log = logging.getLogger("birdscan")
 
 OUT = Path(config.DATA_DIR) / "export_site"
 
-
 def export(min_conf: float | None = None, with_thumbs: bool = True) -> dict:
     mc = min_conf if min_conf is not None else config.UI_MIN_CONF
     store.init_db()
@@ -33,6 +32,17 @@ def export(min_conf: float | None = None, with_thumbs: bool = True) -> dict:
     (OUT / "api").mkdir(parents=True, exist_ok=True)
     (OUT / "api" / "species").mkdir(parents=True, exist_ok=True)
     (OUT / "thumbs").mkdir(parents=True, exist_ok=True)
+
+    # 拷贝前端并改为静态模式
+    src_html = Path(config.ROOT) / "birdscan" / "static" / "index.html"
+    if src_html.exists():
+        html = src_html.read_text(encoding="utf-8")
+        html = html.replace(
+            "const STATIC_MODE = (location.hostname.includes('github.io') "
+            "|| location.protocol === 'file:');",
+            "const STATIC_MODE = true;  // 静态导出（GitHub Pages）"
+        )
+        (OUT / "index.html").write_text(html, encoding="utf-8")
 
     def w(rel, obj):
         (OUT / "api" / rel).write_text(

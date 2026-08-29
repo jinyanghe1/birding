@@ -6,6 +6,7 @@ import logging
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Iterable
 
 from . import config
@@ -493,7 +494,7 @@ def get_species_list(order: str = "count", limit: int = 200, search: str = "",
     for r in rows:
         for k in ("thumb", "img"):
             p = r.get(k)
-            if p and str(config.THUMB_DIR) in p:
+            if p and "/thumbs/" in str(p):
                 r[k] = "thumbs/" + Path(p).name
     return rows
 
@@ -515,7 +516,16 @@ def get_species_detail(species_id: int) -> dict | None:
                 (o["id"],),
             ).fetchall()
             d = dict(o)
-            d["photos"] = [dict(p) for p in phs]
+            photos = []
+            for p in phs:
+                pd = dict(p)
+                # 把绝对路径替换为相对路径
+                for k in ("thumb_cache", "image_path"):
+                    v = pd.get(k)
+                    if v and "/thumbs/" in str(v):
+                        pd[k] = "thumbs/" + Path(v).name
+                photos.append(pd)
+            d["photos"] = photos
             out_obs.append(d)
         return {"species": dict(sp), "observations": out_obs,
                 "count": len(obs),
@@ -649,7 +659,7 @@ def get_map_points(zoom: int = 3, min_conf: float | None = None,
     # 把绝对路径替换为相对路径
     for r in rows:
         p = r.get("thumb")
-        if p and str(config.THUMB_DIR) in p:
+        if p and "/thumbs/" in str(p):
             r["thumb"] = "thumbs/" + Path(p).name
     return rows
 

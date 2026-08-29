@@ -320,8 +320,12 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 // STATIC_MODE = true 时走静态 JSON（GitHub Pages），false 时走 FastAPI（localhost）
 const STATIC_MODE = false;  // 服务器部署，始终走动态 API
-const API = p => STATIC_MODE ? `./api/${p}.json` : `/api/${p}`;
-const imgUrl = p => p ? (STATIC_MODE ? p : '/img?path=' + encodeURIComponent(p)) : '';
+const API = p => `/api/${p}`;
+const imgUrl = p => {
+  if(!p) return '';
+  if(p.startsWith('thumbs/')) return '/' + p;  // 相对路径直接走 Nginx
+  return '/img?path=' + encodeURIComponent(p);  // 绝对路径走 FastAPI 代理
+};
 let ALL = [];
 
 // API Key 管理（写操作需要鉴权）

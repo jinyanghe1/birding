@@ -6,10 +6,10 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
-from . import config, store
+from . import auth, config, store
 
 app = FastAPI(title="观鸟数据库", version="0.1.0")
 
@@ -160,13 +160,13 @@ def api_queue(status: str = "pending", limit: int = 24):
 
 # ------------------------------------------------------------------ CRUD 删除
 @app.delete("/api/photo/{asset_uuid}")
-def api_delete_photo(asset_uuid: str):
+def api_delete_photo(asset_uuid: str, _: None = Depends(auth.verify_api_key)):
     """删除一张照片（误识别清理）。"""
     return store.delete_photo(asset_uuid)
 
 
 @app.delete("/api/observation/{obs_id}")
-def api_delete_observation(obs_id: int):
+def api_delete_observation(obs_id: int, _: None = Depends(auth.verify_api_key)):
     """删除一条观测记录及其所有照片。"""
     return store.delete_observation(obs_id)
 
@@ -179,13 +179,13 @@ def api_suspect(limit: int = 100):
 
 
 @app.post("/api/review/not-bird")
-def api_mark_not_bird(obs_id: int):
+def api_mark_not_bird(obs_id: int, _: None = Depends(auth.verify_api_key)):
     """标记「不是鸟」：删除该观测及其照片。"""
     return store.mark_not_bird(obs_id)
 
 
 @app.post("/api/review/reassign")
-def api_reassign(obs_id: int, new_species_cn: str):
+def api_reassign(obs_id: int, new_species_cn: str, _: None = Depends(auth.verify_api_key)):
     """标记「分类错误」：把观测改到另一个物种下。"""
     return store.reassign_species(obs_id, new_species_cn)
 
@@ -197,6 +197,7 @@ IMPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 @app.post("/api/upload")
 async def api_upload(
+    _: None = Depends(auth.verify_api_key),
     file: UploadFile = File(...),
     taken_at: str = Form(""),
     place_name: str = Form(""),

@@ -22,3 +22,4 @@ logs/
 # 导出产物（太大，不推仓库）
 data/export_site/
 .ebird_token
+data/secrets/

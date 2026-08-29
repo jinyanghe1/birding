@@ -883,3 +883,41 @@ def get_first_seen_map(min_conf: float | None = None) -> list[dict]:
     """
     with conn_ctx(readonly=True) as con:
         return [dict(r) for r in con.execute(sql, (mc,)).fetchall()]
+
+
+# ----------------------------------------------------------------- 常去地点
+def get_frequent_places(min_count: int = 3) -> list[dict]:
+    """从观测记录提取常去地点（出现次数 >= min_count）。
+
+    返回 [{"place_name": "...", "lat": 39.9, "lon": 116.4,
+            "obs_count": 15, "species_count": 8, "last_visit": "2026-08-24"}, ...]
+    """
+    sql = """
+      SELECT place_name, AVG(latitude) lat, AVG(longitude) lon,
+             COUNT(*) obs_count, COUNT(DISTINCT species_id) species_count,
+             MAX(obs_date) last_visit
+      FROM observations
+      WHERE place_name IS NOT NULL AND place_name != ''
+      GROUP BY place_name
+      HAVING COUNT(*) >= ?
+      ORDER BY obs_count DESC
+    """
+    with conn_ctx(readonly=True) as con:
+        return [dict(r) for r in con.execute(sql, (min_count,)).fetchall()]
+
+
+def get_home_region() -> dict | None:
+    """推断常住地：观测最多的城市。"""
+    sql = """
+      SELECT place_name, COUNT(*) c FROM observations
+      WHERE place_name IS NOT NULL AND place_name LIKE '%, %市, %'
+      GROUP BY place_name ORDER BY c DESC LIMIT 1
+    """
+    with conn_ctx(readonly=True) as con:
+        row = con.execute(sql).fetchone()
+        if not row:
+            return None
+        # 从 "西直门, 北京市, 中国" 提取 "北京市"
+        parts = row["place_name"].split(",")
+        city = parts[1].strip() if len(parts) > 1 else parts[0]
+        return {"city": city, "region": row["place_name"], "count": row["c"]}

@@ -177,6 +177,7 @@ input{flex:1;max-width:280px}
     <div class="tab on" data-t="wall">物种墙</div>
     <div class="tab" data-t="map">地图</div>
     <div class="tab" data-t="viz">可视化</div>
+    <div class="tab" data-t="rec">推荐</div>
     <div class="tab" data-t="review">不是我的鸟？</div>
     <div class="tab" data-t="run">扫描与识别</div>
   </div>
@@ -216,6 +217,14 @@ input{flex:1;max-width:280px}
         <p class="tiny">按物种聚合历年观测的月份分布。某物种距离上次出现已超过同期平均值时，高亮「该出门了」。</p>
         <div id="mig"></div>
       </div>
+    </div>
+  </div>
+
+  <div id="rec" style="display:none">
+    <div class="panel">
+      <h2>推荐清单</h2>
+      <p class="tiny">北京观鸟者最近 30 天最常看到的鸟种（eBird 社区数据），减去你已看过的。按社区观测次数排序。</p>
+      <div id="recList"></div>
     </div>
   </div>
 
@@ -515,6 +524,29 @@ $('#btnScan').onclick = async ()=>{
 };
 
 // ---------------------------------------------------------------- 复核工作流
+// ---------------------------------------------------------------- 推荐清单
+async function loadRecommendations(){
+  if(STATIC_MODE){
+    $('#recList').innerHTML = '<div class="tiny">静态模式下不能加载推荐。请在本地运行 <code>bird serve</code> 后访问 localhost:8765。</div>';
+    return;
+  }
+  const rec = await fetch('/api/recommendations').then(r=>r.json()).catch(()=>[]);
+  if(!rec.length){
+    $('#recList').innerHTML = '<div class="empty">暂无推荐（社区数据加载失败或你已看过所有鸟种）。</div>';
+    return;
+  }
+  $('#recList').innerHTML = rec.map(r=>{
+    const priority = r.priority === 'high' ? '🔥' : '·';
+    return `<div class="reviewItem">
+      <div class="info">
+        <div class="nm">${priority} ${esc(r.species)} <span class="conf">社区 ${r.community_count} 次</span></div>
+        <div class="meta">${esc(r.sciName||'')} · ${r.locations.map(esc).join('、')}</div>
+        <div class="meta" style="color:var(--tx3)">最近观测：${r.dates.map(esc).join('、')}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 async function loadReview(){
   if(STATIC_MODE){
     $('#reviewList').innerHTML = '<div class="tiny">静态模式下不能复核。请在本地运行 <code>bird serve</code> 后访问 localhost:8765。</div>';
@@ -709,9 +741,10 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
   t.classList.add('on');
   const v = t.dataset.t;
-  ['wall','mapPane','viz','review','run'].forEach(k=>$('#'+k).style.display = k===v?'block':'none');
+  ['wall','mapPane','viz','rec','review','run'].forEach(k=>$('#'+k).style.display = k===v?'block':'none');
   if(v==='map'){ initMap(); setTimeout(()=>MAP&&MAP.invalidateSize(), 60); }
   if(v==='viz') loadViz();
+  if(v==='rec') loadRecommendations();
   if(v==='review') loadReview();
   if(v==='run') loadQueue();
 });

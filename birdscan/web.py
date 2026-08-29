@@ -103,6 +103,13 @@ def api_hours(min_conf: float = 0.0):
     return store.get_hour_dist(min_conf if min_conf > 0 else None)
 
 
+@app.get("/api/recommendations")
+def api_recommendations():
+    """推荐清单：社区热点物种 - 我的观测 = 这个月该去看什么。"""
+    from . import ebird_calendar
+    return ebird_calendar.get_recommendations()
+
+
 @app.get("/api/migration")
 def api_migration(species_id: int | None = None, min_conf: float = 0.0):
     """按物种聚合历年观测的月份分布，用于迁徙日历。"""

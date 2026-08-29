@@ -51,7 +51,10 @@ def export(min_conf: float | None = None, with_thumbs: bool = True) -> dict:
     # 缩略图映射：绝对路径 -> 相对
     id_map = _thumb_map(with_thumbs)
     w("stats.json", store.get_stats(min_conf=mc))
-    species = store.get_species_list(min_conf=mc, limit=5000)
+    # 同时导出全量 stats（含低置信度），供前端切换阈值时用
+    w("stats-all.json", store.get_stats(min_conf=0.0))
+    # 导出全部物种（前端做置信度过滤），否则 Pages 上无法切换阈值
+    species = store.get_species_list(min_conf=0.0, limit=5000, exclude_suspect=False)
     for s in species:
         s["thumb"] = id_map.get(s.get("thumb"), s.get("thumb"))
         s["img"] = id_map.get(s.get("img"), s.get("img"))

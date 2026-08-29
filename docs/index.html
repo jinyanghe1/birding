@@ -445,7 +445,8 @@ async function loadQueue(){
 let MAP = null, MAP_LAYER = null, MAP_LOAD_TOKEN = 0;
 
 function initMap(){
-  if(MAP) return;
+  if(MAP){ MAP.invalidateSize(); return; }
+  // Leaflet 在 display:none 的容器里初始化会失效，所以必须先显示再初始化
   MAP = L.map('map', {zoomControl:true, attributionControl:true, worldCopyJump:true});
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     attribution:'&copy; OpenStreetMap &copy; CARTO',
@@ -454,7 +455,7 @@ function initMap(){
   MAP_LAYER = L.layerGroup().addTo(MAP);
   MAP.on('zoomend moveend', loadMap);
   MAP.setView([34, 108], 4);
-  loadMap();
+  setTimeout(()=>{ MAP.invalidateSize(); loadMap(); }, 100);
 }
 
 async function loadMap(){

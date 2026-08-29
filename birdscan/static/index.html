@@ -71,8 +71,8 @@ input:focus,select:focus{outline:none;border-color:var(--teal)}
 input{flex:1;max-width:280px}
 
 #mask{position:absolute;inset:0;background:rgba(0,0,0,.6);display:none;z-index:40}
-#modal{display:none;position:absolute;top:40px;left:50%;transform:translateX(-50%);
-  width:min(920px,94vw);max-height:84vh;overflow:auto;background:var(--panel);
+#modal{display:none;position:fixed;top:5vh;left:50%;transform:translateX(-50%);
+  width:min(920px,94vw);max-height:88vh;overflow:auto;background:var(--panel);
   border:1px solid var(--line);border-radius:14px;z-index:50;padding:20px}
 #modal .x{position:sticky;top:0;float:right;cursor:pointer;color:var(--tx2);font-size:20px;line-height:1}
 .gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:12px 0}
@@ -261,20 +261,32 @@ async function load(){
   if(STATIC_MODE){
     const q = $('#q').value.toLowerCase();
     const order = $('#ord').value;
+    const minC = parseFloat($('#mc').value);
     if(q) list = list.filter(s=>
       (s.common_name_cn||'').toLowerCase().includes(q) ||
       (s.scientific_name||'').toLowerCase().includes(q) ||
       (s.common_name_en||'').toLowerCase().includes(q) ||
       (s.family_cn||'').toLowerCase().includes(q));
+    if(minC > 0) list = list.filter(s => (s.best_conf || 0) >= minC);
     if(order==='recent') list.sort((a,b)=>(b.last_date||'').localeCompare(a.last_date||''));
     else if(order==='name') list.sort((a,b)=>(a.common_name_cn||'').localeCompare(b.common_name_cn||''));
   }
+  // 静态模式下根据过滤后的列表重新计算 stats
+  let statsData = st;
+  if(STATIC_MODE){
+    const places = new Set(list.map(s => s.top_place).filter(Boolean)).size;
+    statsData = {
+      ...st,
+      species_confident: list.length,
+      places_confident: places,
+    };
+  }
   $('#stats').innerHTML = [
-    ['鸟种', st.species_confident ?? st.species],
-    ['观测次数', st.observations_confident ?? st.observations],
-    ['地点', st.places_confident ?? st.places],
-    ['照片', st.photos],
-    ['待复核', st.needs_review ?? 0]
+    ['鸟种', statsData.species_confident ?? statsData.species],
+    ['观测次数', statsData.observations_confident ?? statsData.observations],
+    ['地点', statsData.places_confident ?? statsData.places],
+    ['照片', statsData.photos],
+    ['待复核', statsData.needs_review ?? 0]
   ].map(([l,n])=>`<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
 
   ALL = list;
@@ -433,7 +445,8 @@ async function loadQueue(){
 let MAP = null, MAP_LAYER = null, MAP_LOAD_TOKEN = 0;
 
 function initMap(){
-  if(MAP) return;
+  if(MAP){ MAP.invalidateSize(); return; }
+  // Leaflet 在 display:none 的容器里初始化会失效，所以必须先显示再初始化
   MAP = L.map('map', {zoomControl:true, attributionControl:true, worldCopyJump:true});
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     attribution:'&copy; OpenStreetMap &copy; CARTO',
@@ -442,7 +455,7 @@ function initMap(){
   MAP_LAYER = L.layerGroup().addTo(MAP);
   MAP.on('zoomend moveend', loadMap);
   MAP.setView([34, 108], 4);
-  loadMap();
+  setTimeout(()=>{ MAP.invalidateSize(); loadMap(); }, 100);
 }
 
 async function loadMap(){

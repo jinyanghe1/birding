@@ -112,6 +112,24 @@ input{flex:1;max-width:280px}
 .ext a:hover{border-color:var(--teal)}
 .prot{background:rgba(226,88,90,.15);color:var(--red);padding:2px 8px;border-radius:6px;font-size:11px}
 
+/* ---------------- 复核工作流 */
+.reviewItem{display:flex;gap:14px;padding:12px 0;border-top:1px solid var(--line);align-items:flex-start}
+.reviewItem:first-of-type{border-top:none}
+.reviewItem img{width:100px;height:100px;border-radius:8px;object-fit:cover;background:var(--panel2);flex:none;cursor:zoom-in}
+.reviewItem .info{flex:1;min-width:0}
+.reviewItem .nm{font-weight:500;margin-bottom:3px}
+.reviewItem .meta{font-size:12px;color:var(--tx2);line-height:1.6}
+.reviewItem .conf{font-size:11px;color:var(--amber)}
+.reviewItem .acts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.reviewItem .acts button{padding:5px 12px;border-radius:7px;border:1px solid var(--line);
+  background:var(--panel2);color:var(--tx);font:500 12px inherit;cursor:pointer}
+.reviewItem .acts button.danger{background:rgba(226,88,90,.15);color:var(--red);border-color:rgba(226,88,90,.3)}
+.reviewItem .acts button.primary{background:var(--teal);color:#0d1a17;border:0}
+.reviewItem .acts button:hover{filter:brightness(1.1)}
+.reassignBox{display:flex;gap:6px;margin-top:8px}
+.reassignBox input{flex:1;padding:5px 10px;border-radius:7px;border:1px solid var(--line);
+  background:var(--panel2);color:var(--tx);font:12px inherit}
+
 /* ---------------- 加新上传弹窗 */
 #addBtn{background:var(--teal);color:#0d1a17;border:0;border-radius:8px;
   padding:8px 16px;font:500 13px inherit;cursor:pointer;white-space:nowrap}
@@ -159,6 +177,7 @@ input{flex:1;max-width:280px}
     <div class="tab on" data-t="wall">物种墙</div>
     <div class="tab" data-t="map">地图</div>
     <div class="tab" data-t="viz">可视化</div>
+    <div class="tab" data-t="review">不是我的鸟？</div>
     <div class="tab" data-t="run">扫描与识别</div>
   </div>
 
@@ -190,6 +209,14 @@ input{flex:1;max-width:280px}
     <div class="viz" style="margin-top:16px">
       <div class="panel"><h2>观测地点 Top</h2><div id="pl"></div></div>
       <div class="panel"><h2>时段分布</h2><div id="hr"></div></div>
+    </div>
+  </div>
+
+  <div id="review" style="display:none">
+    <div class="panel">
+      <h2>不是我的鸟？</h2>
+      <p class="tiny">存疑样本（低置信度 或 不在中国名录）。标记「不是鸟」会删除照片和观测；「分类错误」会改到正确物种下。</p>
+      <div id="reviewList"></div>
     </div>
   </div>
 
@@ -326,17 +353,26 @@ async function openSpecies(id){
     </div>
     ${s.summary?`<div class="meta">${esc(s.summary)}</div>`:''}
     ${extLinksHtml(s.links_json)}
+    ${s.scientific_name?`<div style="margin:10px 0">
+      <a href="https://xeno-canto.org/explore?query=sp%3A%22${encodeURIComponent(s.scientific_name)}%22"
+         target="_blank" rel="noopener" style="background:var(--panel2);border:1px solid var(--line);
+         border-radius:8px;padding:6px 14px;font-size:13px;color:var(--teal);text-decoration:none">
+        🔊 听叫声（Xeno-canto）</a>
+      <span class="tiny" style="margin-left:8px">跳转到 Xeno-canto 搜索页</span>
+    </div>`:''}
     <div style="margin:12px 0" class="tiny">共 <b style="color:var(--amber)">${d.count}</b> 次观测
       ${d.places.length? ' · 地点：'+d.places.slice(0,6).map(esc).join('、'):''}</div>
     ${photos.length?`<div class="gal">${photos.slice(0,24).map(x=>
       `<img loading="lazy" src="${imgUrl(x.p.thumb_cache||x.p.image_path)}"
         title="${esc(x.o.obs_date)} ${esc(x.o.place_name||'')}" onclick="window.open(this.src)">`).join('')}</div>`:''}
     <h2 style="margin-top:18px">观测记录</h2>
-    ${d.observations.map(o=>`<div class="obs">
+    ${d.observations.map(o=>`<div class="obs" data-obs="${o.id}">
       <span class="d">${esc(o.obs_date)}</span>
       <span class="p">${esc(o.place_name||'（无地点）')}</span>
       ${o.confidence!=null?`<span class="tiny"> 置信度 ${(o.confidence*100).toFixed(0)}%</span>`:''}
       ${o.notes?`<div class="n">${esc(o.notes)}</div>`:''}
+      ${!STATIC_MODE?`<button class="danger" style="margin-top:6px;padding:4px 10px;font-size:11px"
+        onclick="deleteObs(${o.id}, this)">删除此观测</button>`:''}
     </div>`).join('')}`;
   $('#modal').style.display='block'; $('#mask').style.display='block';
 }
@@ -349,6 +385,14 @@ function extLinksHtml(lj){
     `<a href="${links[k]}" target="_blank" rel="noopener">${esc(k)} ↗</a>`).join('')}</div>`;
 }
 function closeM(){ $('#modal').style.display='none'; $('#mask').style.display='none'; }
+async function deleteObs(obsId, btn){
+  if(!confirm('确认删除这条观测及其所有照片？')) return;
+  btn.disabled = true;
+  const r = await fetch(`/api/observation/${obsId}`, {method:'DELETE'}).then(r=>r.json());
+  btn.closest('.obs').style.opacity = '0.3';
+  btn.textContent = `已删除（${r.deleted_photos} 张照片）`;
+  setTimeout(()=>{ closeM(); load(); }, 800);
+}
 $('#mask').onclick = closeM;
 document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeM(); });
 
@@ -427,6 +471,66 @@ $('#btnScan').onclick = async ()=>{
   }catch(e){ $('#scanOut').textContent = '失败：'+e; }
   $('#btnScan').disabled = false;
 };
+
+// ---------------------------------------------------------------- 复核工作流
+async function loadReview(){
+  if(STATIC_MODE){
+    $('#reviewList').innerHTML = '<div class="tiny">静态模式下不能复核。请在本地运行 <code>bird serve</code> 后访问 localhost:8765。</div>';
+    return;
+  }
+  const items = await fetch('/api/review/suspect?limit=50').then(r=>r.json());
+  if(!items.length){
+    $('#reviewList').innerHTML = '<div class="empty">没有存疑样本了。</div>';
+    return;
+  }
+  $('#reviewList').innerHTML = items.map(it=>{
+    const suspect = it.in_china === 0 ? '⚠️ 不在中国名录' : `置信度 ${(it.confidence*100).toFixed(0)}%`;
+    return `<div class="reviewItem" data-obs="${it.obs_id}">
+      <img src="${imgUrl(it.thumb||it.img)}" onclick="window.open('${imgUrl(it.img)}')" onerror="this.style.display='none'">
+      <div class="info">
+        <div class="nm">${esc(it.common_name_cn)} <span class="conf">${suspect}</span></div>
+        <div class="meta">${esc(it.obs_date)} ${esc(it.obs_time||'')} · ${esc(it.place_name||'（无地点）')} · ${esc(it.identified_by||'')}</div>
+        <div class="acts">
+          <button class="danger" onclick="markNotBird(${it.obs_id}, this)">不是鸟</button>
+          <button onclick="showReassign(${it.obs_id}, this)">分类错误</button>
+          <button onclick="keepSample(${it.obs_id}, this)">保留</button>
+        </div>
+        <div class="reassignBox" style="display:none">
+          <input placeholder="正确的中文名，例如：夜鹭" id="reassign-${it.obs_id}">
+          <button class="primary" onclick="doReassign(${it.obs_id}, this)">确认</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function markNotBird(obsId, btn){
+  if(!confirm('确认标记「不是鸟」？该观测及其照片将被删除。')) return;
+  btn.disabled = true;
+  const r = await fetch(`/api/review/not-bird?obs_id=${obsId}`, {method:'POST'}).then(r=>r.json());
+  btn.closest('.reviewItem').style.opacity = '0.3';
+  btn.closest('.reviewItem').querySelector('.meta').innerHTML += ` <span style="color:var(--red)">已删除（${r.deleted_photos} 张照片）</span>`;
+}
+
+function showReassign(obsId, btn){
+  const box = btn.closest('.reviewItem').querySelector('.reassignBox');
+  box.style.display = box.style.display==='none' ? 'flex' : 'none';
+}
+
+async function doReassign(obsId, btn){
+  const input = $(`#reassign-${obsId}`);
+  const name = input.value.trim();
+  if(!name){ alert('请输入正确的中文名'); return; }
+  btn.disabled = true;
+  const r = await fetch(`/api/review/reassign?obs_id=${obsId}&new_species_cn=${encodeURIComponent(name)}`, {method:'POST'}).then(r=>r.json());
+  btn.closest('.reviewItem').style.opacity = '0.3';
+  btn.closest('.reviewItem').querySelector('.meta').innerHTML += ` <span style="color:var(--teal)">已改到「${esc(name)}」</span>`;
+}
+
+async function keepSample(obsId, btn){
+  btn.closest('.reviewItem').style.opacity = '0.3';
+  btn.closest('.reviewItem').querySelector('.meta').innerHTML += ` <span style="color:var(--tx3)">已保留</span>`;
+}
 
 async function loadQueue(){
   if(STATIC_MODE){
@@ -554,9 +658,10 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
   t.classList.add('on');
   const v = t.dataset.t;
-  ['wall','mapPane','viz','run'].forEach(k=>$('#'+k).style.display = k===v?'block':'none');
+  ['wall','mapPane','viz','review','run'].forEach(k=>$('#'+k).style.display = k===v?'block':'none');
   if(v==='map'){ initMap(); setTimeout(()=>MAP&&MAP.invalidateSize(), 60); }
   if(v==='viz') loadViz();
+  if(v==='review') loadReview();
   if(v==='run') loadQueue();
 });
 let tm; $('#q').oninput = ()=>{ clearTimeout(tm); tm=setTimeout(load, 250); };

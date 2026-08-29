@@ -138,6 +138,38 @@ def api_queue(status: str = "pending", limit: int = 24):
     return store.get_queue(status, limit)
 
 
+# ------------------------------------------------------------------ CRUD 删除
+@app.delete("/api/photo/{asset_uuid}")
+def api_delete_photo(asset_uuid: str):
+    """删除一张照片（误识别清理）。"""
+    return store.delete_photo(asset_uuid)
+
+
+@app.delete("/api/observation/{obs_id}")
+def api_delete_observation(obs_id: int):
+    """删除一条观测记录及其所有照片。"""
+    return store.delete_observation(obs_id)
+
+
+# ------------------------------------------------------------------ 复核工作流
+@app.get("/api/review/suspect")
+def api_suspect(limit: int = 100):
+    """取存疑样本（低置信度 或 不在中国名录）。"""
+    return store.get_suspect_samples(limit)
+
+
+@app.post("/api/review/not-bird")
+def api_mark_not_bird(obs_id: int):
+    """标记「不是鸟」：删除该观测及其照片。"""
+    return store.mark_not_bird(obs_id)
+
+
+@app.post("/api/review/reassign")
+def api_reassign(obs_id: int, new_species_cn: str):
+    """标记「分类错误」：把观测改到另一个物种下。"""
+    return store.reassign_species(obs_id, new_species_cn)
+
+
 # ------------------------------------------------------------------ 手动导入
 IMPORT_DIR = Path(config.DATA_DIR) / "imports"
 IMPORT_DIR.mkdir(parents=True, exist_ok=True)

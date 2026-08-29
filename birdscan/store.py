@@ -736,3 +736,98 @@ def reset_scanned() -> int:
         n = con.execute("SELECT COUNT(*) c FROM scanned_assets").fetchone()["c"]
         con.execute("DELETE FROM scanned_assets")
         return n
+
+
+# ----------------------------------------------------------------- CRUD 删除
+def delete_photo(asset_uuid: str) -> dict:
+    """删除一张照片（误识别清理）。如果该照片是其观测记录的最后一张，
+    观测记录也会被删除（避免空观测）。返回删除统计。"""
+    with conn_ctx() as con:
+        row = con.execute(
+            "SELECT obs_id FROM photos WHERE asset_uuid = ?",
+            (asset_uuid,)).fetchone()
+        if not row:
+            return {"deleted_photo": 0, "deleted_obs": 0}
+        obs_id = row["obs_id"]
+        con.execute("DELETE FROM photos WHERE asset_uuid = ?", (asset_uuid,))
+        left = con.execute(
+            "SELECT COUNT(*) FROM photos WHERE obs_id = ?", (obs_id,)).fetchone()[0]
+        deleted_obs = 0
+        if left == 0:
+            con.execute("DELETE FROM observations WHERE id = ?", (obs_id,))
+            deleted_obs = 1
+        else:
+            con.execute(
+                "UPDATE observations SET photo_count = ? WHERE id = ?",
+                (left, obs_id))
+    log.info("删除照片 %s（观测 %d，剩 %d 张）", asset_uuid, obs_id, left)
+    return {"deleted_photo": 1, "deleted_obs": deleted_obs, "obs_left": left}
+
+
+def delete_observation(obs_id: int) -> dict:
+    """删除一条观测记录及其所有照片。"""
+    with conn_ctx() as con:
+        photos = con.execute(
+            "SELECT COUNT(*) FROM photos WHERE obs_id = ?", (obs_id,)).fetchone()[0]
+        con.execute("DELETE FROM photos WHERE obs_id = ?", (obs_id,))
+        con.execute("DELETE FROM observations WHERE id = ?", (obs_id,))
+    log.info("删除观测 %d（%d 张照片）", obs_id, photos)
+    return {"deleted_obs": 1, "deleted_photos": photos}
+
+
+# ----------------------------------------------------------------- 复核工作流
+def get_suspect_samples(limit: int = 100) -> list[dict]:
+    """取存疑样本：低置信度 或 不在中国名录的观测。
+    供「不是我的鸟？」复核页展示。"""
+    sql = f"""
+      SELECT o.id obs_id, o.obs_date, o.obs_time, o.place_name, o.confidence,
+             o.identified_by, o.notes,
+             s.id species_id, s.common_name_cn, s.scientific_name,
+             s.in_china, s.family_cn,
+             (SELECT p.asset_uuid FROM photos p WHERE p.obs_id = o.id
+                ORDER BY p.is_representative DESC, p.sharpness DESC LIMIT 1) asset_uuid,
+             (SELECT p2.thumb_cache FROM photos p2 WHERE p2.obs_id = o.id
+                ORDER BY p2.is_representative DESC, p2.sharpness DESC LIMIT 1) thumb,
+             (SELECT p3.image_path FROM photos p3 WHERE p3.obs_id = o.id
+                ORDER BY p3.is_representative DESC, p3.sharpness DESC LIMIT 1) img
+      FROM observations o JOIN species s ON s.id = o.species_id
+      WHERE o.confidence < 0.45 OR s.in_china = 0
+      ORDER BY o.confidence ASC, o.obs_date DESC
+      LIMIT ?
+    """
+    with conn_ctx(readonly=True) as con:
+        return [dict(r) for r in con.execute(sql, (limit,)).fetchall()]
+
+
+def mark_not_bird(obs_id: int) -> dict:
+    """标记「不是鸟」：删除该观测及其照片，同步更新物种墙。"""
+    return delete_observation(obs_id)
+
+
+def reassign_species(obs_id: int, new_species_cn: str) -> dict:
+    """标记「分类错误」：把观测改到另一个物种下。"""
+    sid = upsert_species(new_species_cn)
+    with conn_ctx() as con:
+        # 查新物种下是否已有同日观测，有则合并
+        row = con.execute(
+            "SELECT obs_date FROM observations WHERE id = ?", (obs_id,)).fetchone()
+        if row:
+            existing = con.execute(
+                "SELECT id FROM observations WHERE species_id = ? AND obs_date = ? AND id != ?",
+                (sid, row["obs_date"], obs_id)).fetchone()
+            if existing:
+                con.execute(
+                    "UPDATE photos SET obs_id = ? WHERE obs_id = ?",
+                    (existing["id"], obs_id))
+                con.execute("DELETE FROM observations WHERE id = ?", (obs_id,))
+                n = con.execute(
+                    "SELECT COUNT(*) FROM photos WHERE obs_id = ?",
+                    (existing["id"],)).fetchone()[0]
+                con.execute(
+                    "UPDATE observations SET photo_count = ? WHERE id = ?",
+                    (n, existing["id"]))
+                return {"merged_into": existing["id"], "new_species": new_species_cn}
+        con.execute(
+            "UPDATE observations SET species_id = ?, identified_by = 'manual' WHERE id = ?",
+            (sid, obs_id))
+    return {"reassigned": obs_id, "new_species": new_species_cn}

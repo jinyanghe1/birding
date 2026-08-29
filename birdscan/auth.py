@@ -50,7 +50,7 @@ def verify_api_key(x_api_key: str = Header(None), request: Request = None):
             ...
     """
     # 读操作不需要鉴权
-    if request and request.url.path not in WRITE_ENDPOINTS:
+    if request and not any(request.url.path.startswith(ep) for ep in WRITE_ENDPOINTS):
         return
 
     # 检查 API key

@@ -120,6 +120,9 @@ def cmd_ebird(a) -> int:
     elif a.action == "test":
         r = ebird._req("https://api.ebird.org/v2/ref/region/list/country/world")
         print("token 有效" if r else "token 无效或未设置")
+    elif a.action == "auto-submit":
+        from . import ebird_submit
+        return ebird_submit.auto_submit()
     return 0
 
 
@@ -311,7 +314,7 @@ def main(argv=None) -> int:
     s.set_defaults(fn=cmd_export_site)
 
     s = sub.add_parser("ebird", help="eBird 同步")
-    s.add_argument("action", choices=["export", "token", "test"])
+    s.add_argument("action", choices=["export", "token", "test", "auto-submit"])
     s.add_argument("--token", default="", help="API token")
     s.add_argument("--min-conf", type=float, default=0.45)
     s.set_defaults(fn=cmd_ebird)

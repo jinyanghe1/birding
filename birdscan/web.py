@@ -103,6 +103,19 @@ def api_hours(min_conf: float = 0.0):
     return store.get_hour_dist(min_conf if min_conf > 0 else None)
 
 
+@app.get("/api/migration")
+def api_migration(species_id: int | None = None, min_conf: float = 0.0):
+    """按物种聚合历年观测的月份分布，用于迁徙日历。"""
+    return store.get_species_monthly_pattern(
+        species_id, min_conf if min_conf > 0 else None)
+
+
+@app.get("/api/first-seen")
+def api_first_seen(min_conf: float = 0.0):
+    """每个物种的首次观测地点，用于「加新地图」。"""
+    return store.get_first_seen_map(min_conf if min_conf > 0 else None)
+
+
 @app.get("/api/map")
 def api_map(zoom: int = 3, min_conf: float = 0.0,
             sw_lat: float | None = None, sw_lon: float | None = None,
@@ -218,9 +231,9 @@ async def api_upload(
         except Exception:
             pass
 
-    # 用本地模型识别
+    # 用本地模型识别（TTA 投票降低方差）
     from . import classifier
-    res = classifier.identify_file(str(img_path), topk=2)
+    res = classifier.identify_file_tta(str(img_path), topk=2)
     if not res.get("is_bird") or not res.get("candidates"):
         return JSONResponse({
             "ok": False, "error": "未识别出鸟类",

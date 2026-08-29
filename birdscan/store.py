@@ -831,3 +831,55 @@ def reassign_species(obs_id: int, new_species_cn: str) -> dict:
             "UPDATE observations SET species_id = ?, identified_by = 'manual' WHERE id = ?",
             (sid, obs_id))
     return {"reassigned": obs_id, "new_species": new_species_cn}
+
+
+# ----------------------------------------------------------------- 迁徙日历
+def get_species_monthly_pattern(species_id: int | None = None,
+                                min_conf: float | None = None) -> list[dict]:
+    """按物种聚合历年观测的月份分布，用于迁徙日历。
+
+    返回 [{"species_id":1,"common_name_cn":"夜鹭","month":6,"years":3,"count":5}, ...]
+    """
+    mc = min_conf if min_conf is not None else config.UI_MIN_CONF
+    where = "WHERE o.confidence >= ?"
+    args = [mc]
+    if species_id:
+        where += " AND o.species_id = ?"
+        args.append(species_id)
+    sql = f"""
+      SELECT o.species_id, s.common_name_cn, s.family_cn,
+             CAST(substr(o.obs_date, 6, 2) AS INT) month,
+             COUNT(DISTINCT substr(o.obs_date, 1, 4)) years,
+             COUNT(*) count
+      FROM observations o JOIN species s ON s.id = o.species_id
+      {where}
+      GROUP BY o.species_id, month
+      ORDER BY s.common_name_cn, month
+    """
+    with conn_ctx(readonly=True) as con:
+        return [dict(r) for r in con.execute(sql, args).fetchall()]
+
+
+def get_first_seen_map(min_conf: float | None = None) -> list[dict]:
+    """每个物种的首次观测地点，用于「加新地图」。
+
+    返回 [{"species_id":1,"common_name_cn":"夜鹭","first_date":"2025-07-03",
+            "lat":22.49,"lon":113.95,"thumb":"..."}, ...]
+    """
+    mc = min_conf if min_conf is not None else config.UI_MIN_CONF
+    sql = f"""
+      SELECT s.id species_id, s.common_name_cn, s.family_cn,
+             o.obs_date first_date, o.latitude lat, o.longitude lon,
+             (SELECT p.thumb_cache FROM photos p WHERE p.obs_id = o.id
+                AND p.thumb_cache IS NOT NULL LIMIT 1) thumb
+      FROM species s
+      JOIN (
+        SELECT species_id, MIN(obs_date) first_date FROM observations
+        WHERE confidence >= ? GROUP BY species_id
+      ) first ON first.species_id = s.id
+      JOIN observations o ON o.species_id = s.id AND o.obs_date = first.first_date
+      WHERE o.latitude IS NOT NULL AND o.longitude IS NOT NULL
+      ORDER BY first_date DESC
+    """
+    with conn_ctx(readonly=True) as con:
+        return [dict(r) for r in con.execute(sql, (mc,)).fetchall()]

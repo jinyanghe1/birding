@@ -79,6 +79,11 @@ def export(min_conf: float | None = None, with_thumbs: bool = True) -> dict:
     w("places.json", store.get_places(12, mc))
     w("timeline.json", store.get_timeline(mc))
     w("hours.json", store.get_hour_dist(mc))
+    w("migration.json", store.get_species_monthly_pattern(min_conf=mc))
+    first_seen = store.get_first_seen_map(min_conf=mc)
+    for f in first_seen:
+        f["thumb"] = id_map.get(f.get("thumb"), f.get("thumb"))
+    w("first_seen.json", first_seen)
 
     for z in range(2, 10):
         pts = store.get_map_points(zoom=z, min_conf=mc)

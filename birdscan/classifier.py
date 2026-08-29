@@ -127,6 +127,54 @@ def identify_file(path: str, topk: int = 2) -> dict:
     return result
 
 
+def identify_file_tta(path: str, topk: int = 2) -> dict:
+    """带 TTA（测试时增强）的识别：原图 + 水平翻转 + 中心裁剪，投票取众数。
+
+    实测教训：单次推理的置信度方差很大（同一张图可能 0.03 或 0.94），
+    TTA 能显著降低方差。
+    """
+    from PIL import Image, ImageOps
+    result = {"is_bird": False, "box_conf": 0.0, "candidates": []}
+    try:
+        im = Image.open(path).convert("RGB")
+    except Exception:
+        return result
+    try:
+        det = _get_detector()
+        boxes = det.detect(im)
+    except Exception as e:
+        log.debug("鸟检测失败 %s: %s", path, e)
+        return result
+    if not boxes:
+        return result
+    x1, y1, x2, y2, bconf = boxes[0]
+    result["box_conf"] = bconf
+    if (x2 - x1) < 8 or (y2 - y1) < 8:
+        return result
+    crop = im.crop((x1, y1, x2, y2))
+    clf = _get_classifier()
+
+    # TTA：原图 + 水平翻转 + 中心裁剪
+    votes = []
+    for variant in (crop, ImageOps.mirror(crop), crop.resize((224, 224))):
+        cands = clf.classify_pil(variant, topk=5)
+        if cands:
+            votes.append(cands[0])
+    if not votes:
+        return result
+
+    # 投票：按置信度加权
+    from collections import Counter
+    names = [v["common_name_cn"] for v in votes]
+    winner = Counter(names).most_common(1)[0][0]
+    # 取投票一致的平均置信度
+    avg_conf = sum(v["confidence"] for v in votes if v["common_name_cn"] == winner) / len(names)
+    result["candidates"] = [{"common_name_cn": winner, "confidence": avg_conf}]
+    result["is_bird"] = True
+    result["tta_votes"] = len(votes)
+    return result
+
+
 _DET = None
 _CLF = None
 

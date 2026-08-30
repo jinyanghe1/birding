@@ -819,7 +819,14 @@ def get_suspect_samples(limit: int = 100) -> list[dict]:
       LIMIT ?
     """
     with conn_ctx(readonly=True) as con:
-        return [dict(r) for r in con.execute(sql, (limit,)).fetchall()]
+        rows = [dict(r) for r in con.execute(sql, (limit,)).fetchall()]
+    # 把绝对路径替换为相对路径，前端才能加载
+    for r in rows:
+        for k in ("thumb", "img"):
+            p = r.get(k)
+            if p and "/thumbs/" in str(p):
+                r[k] = "thumbs/" + Path(p).name
+    return rows
 
 
 def mark_not_bird(obs_id: int) -> dict:

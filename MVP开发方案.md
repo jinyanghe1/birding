@@ -651,6 +651,22 @@ bird review --low-confidence            # 列出需要人工复核的
 - 本地微调（用 iNat2021 中国区数据）
 - 导出 eBird/中国观鸟记录中心格式
 
+### P5 — 家庭共享相册（2026-08-30 新增，类 Apple Shared Library）
+
+> 详细 spec 见 `docs/家庭共享相册-SPEC.md`
+
+| # | 任务 | 验收标准 |
+|---|---|---|
+| P5-1 | 用户体系 + 相册（users/albums/cloud_photos 三表 + 邀请制认证） | owner 能生成邀请链接，家人注册后拿到独立 API Key |
+| P5-2 | 批量上传 + 手机适配 + 下载 | 手机浏览器从相册多选上传显示进度；单张/zip 下载 |
+| P5-3 | 本地↔云端双向同步（`bird sync pull/push`）+ PWA | 本地目录与云端相册互相同步；手机可添加到主屏 |
+
+**设计要点**：
+- 每用户一把 API Key（32 hex），写操作 `Authorization: Bearer` 或 `X-API-Key`
+- cloud_photos 照片识别通过后并入现有 observations/photos（`image_source='cloud'`）
+- 手机批量选图用 `<input type="file" multiple>`，系统相册原生支持
+- 存储：40GB 磁盘约 4000–16000 张原图，满后挂腾讯云 COS（见 spec §6）
+
 ---
 
 ## 11. 定时任务与权限（macOS 特有问题）

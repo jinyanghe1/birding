@@ -692,9 +692,10 @@ function initMap(){
   if(MAP){ MAP.invalidateSize(); return; }
   // Leaflet 在 display:none 的容器里初始化会失效，所以必须先显示再初始化
   MAP = L.map('mapContainer', {zoomControl:true, attributionControl:true, worldCopyJump:true});
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution:'&copy; OpenStreetMap &copy; CARTO',
-    maxZoom:18, subdomains:'abcd'
+  // 百度地图瓦片（免 key，需要申请 ak）
+  L.tileLayer('https://maponline{s}.bdimg.com/tile/?qt=tile&x={x}&y={y}&z={z}&styles=pl&scaler=1&udt=20191119', {
+    attribution:'&copy; 百度地图',
+    maxZoom:18, subdomains:['0','1','2','3']
   }).addTo(MAP);
   MAP_LAYER = L.layerGroup().addTo(MAP);
   MAP.on('zoomend moveend', loadMap);

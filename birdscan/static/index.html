@@ -688,12 +688,13 @@ async function loadQueue(){
 // ---------------------------------------------------------------- 地图
 let MAP = null, MAP_LAYER = null, MAP_LOAD_TOKEN = 0;
 
-function initMap(){
+async function initMap(){
   if(MAP){ MAP.invalidateSize(); return; }
   // Leaflet 在 display:none 的容器里初始化会失效，所以必须先显示再初始化
   MAP = L.map('mapContainer', {zoomControl:true, attributionControl:true, worldCopyJump:true});
-  // 百度地图瓦片（免 key，需要申请 ak）
-  L.tileLayer('https://maponline{s}.bdimg.com/tile/?qt=tile&x={x}&y={y}&z={z}&styles=pl&scaler=1&udt=20191119', {
+  // 百度地图瓦片（带 AK，从后端读）
+  const ak = await fetch('/api/config/baidu-map-ak').then(r=>r.json()).then(j=>j.ak||'').catch(()=>'');
+  L.tileLayer('https://maponline{s}.bdimg.com/tile/?qt=tile&x={x}&y={y}&z={z}&styles=pl&scaler=1&udt=20191119&ak=' + ak, {
     attribution:'&copy; 百度地图',
     maxZoom:18, subdomains:['0','1','2','3']
   }).addTo(MAP);

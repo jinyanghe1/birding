@@ -65,6 +65,16 @@ def api_stats(min_conf: float = 0.0):
     return store.get_stats(min_conf if min_conf > 0 else None)
 
 
+@app.get("/api/config/baidu-map-ak")
+def api_baidu_map_ak():
+    """百度地图服务端 AK（从 secrets 文件读，不进 git）。"""
+    from pathlib import Path
+    ak_file = Path(config.DATA_DIR) / "secrets" / "baidu_map_ak.txt"
+    if ak_file.exists():
+        return {"ak": ak_file.read_text().strip()}
+    return {"ak": ""}
+
+
 @app.get("/api/species")
 def api_species(order: str = "count", search: str = "", limit: int = 200,
                 min_conf: float = 0.0):

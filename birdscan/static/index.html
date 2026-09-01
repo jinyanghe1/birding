@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#3fbfa0">
+<link rel="manifest" href="/manifest.json">
 <title>我的观鸟档案</title>
 <style>
 :root{
@@ -181,6 +183,7 @@ input{flex:1;max-width:280px}
     <div class="tab" data-t="map">地图</div>
     <div class="tab" data-t="viz">可视化</div>
     <div class="tab" data-t="rec">推荐</div>
+    <div class="tab" data-t="albums">家庭相册</div>
     <div class="tab" data-t="review">不是我的鸟？</div>
     <div class="tab" data-t="run">扫描与识别</div>
   </div>
@@ -225,6 +228,34 @@ input{flex:1;max-width:280px}
         <h2>迁徙日历</h2>
         <p class="tiny">按物种聚合历年观测的月份分布。某物种距离上次出现已超过同期平均值时，高亮「该出门了」。</p>
         <div id="mig"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="albums" style="display:none">
+    <div class="panel">
+      <h2>家庭相册</h2>
+      <p class="tiny">家人共享的观鸟相册。点 🔑 设置 API Key 后可上传。</p>
+      <div style="display:flex;gap:8px;margin:10px 0">
+        <input id="newAlbumName" placeholder="新相册名" style="flex:1;padding:8px;border-radius:8px;
+          border:1px solid var(--line);background:var(--panel2);color:var(--tx);font:13px inherit">
+        <button onclick="createAlbum()" style="background:var(--teal);color:#0d1a17;border:0;
+          border-radius:8px;padding:8px 16px;font:500 13px inherit;cursor:pointer">创建相册</button>
+        <button onclick="inviteFamily()" style="background:var(--panel2);color:var(--tx);border:1px solid var(--line);
+          border-radius:8px;padding:8px 16px;font:500 13px inherit;cursor:pointer">邀请家人</button>
+      </div>
+      <div id="albumList"></div>
+      <div id="albumDetail" style="display:none;margin-top:16px">
+        <h3 id="albumTitle"></h3>
+        <div style="display:flex;gap:8px;margin:10px 0">
+          <input type="file" id="albumFiles" accept="image/*,video/*" multiple style="flex:1">
+          <button onclick="uploadToAlbum()" style="background:var(--teal);color:#0d1a17;border:0;
+            border-radius:8px;padding:8px 16px;font:500 13px inherit;cursor:pointer">批量上传</button>
+          <button onclick="downloadAlbum()" style="background:var(--panel2);color:var(--tx);border:1px solid var(--line);
+            border-radius:8px;padding:8px 16px;font:500 13px inherit;cursor:pointer">下载整本</button>
+        </div>
+        <div id="uploadProgress"></div>
+        <div id="albumPhotos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-top:12px"></div>
       </div>
     </div>
   </div>
@@ -585,6 +616,74 @@ $('#btnScan').onclick = async ()=>{
 
 // ---------------------------------------------------------------- 复核工作流
 // ---------------------------------------------------------------- 推荐清单
+// ---------------------------------------------------------------- 家庭相册
+let CURRENT_ALBUM = null;
+
+async function loadAlbums(){
+  const albums = await fetch('/api/albums', {headers: apiHeaders()}).then(r=>r.json()).catch(()=>[]);
+  if(!albums.length){
+    $('#albumList').innerHTML = '<div class="tiny">还没有相册。创建一个，或点「邀请家人」生成邀请链接。</div>';
+    return;
+  }
+  $('#albumList').innerHTML = albums.map(a=>`
+    <div class="reviewItem" style="cursor:pointer" onclick="openAlbum(${a.id}, '${esc(a.name)}')">
+      <div class="info">
+        <div class="nm">${esc(a.name)} <span class="conf">${a.photo_count} 张</span></div>
+        <div class="meta">${esc(a.owner_name)} · ${esc(a.created_at||'').slice(0,10)}</div>
+      </div>
+    </div>`).join('');
+}
+
+async function createAlbum(){
+  const name = $('#newAlbumName').value.trim();
+  if(!name){ alert('请输入相册名'); return; }
+  const r = await fetch('/api/albums', {method:'POST', headers: {...apiHeaders(), 'Content-Type':'application/json'},
+    body: JSON.stringify({name})}).then(r=>r.json());
+  $('#newAlbumName').value = '';
+  loadAlbums();
+}
+
+async function inviteFamily(){
+  const r = await fetch('/api/auth/invite', {method:'POST', headers: apiHeaders()}).then(r=>r.json());
+  if(r.invite_code){
+    const link = `${location.origin}/?invite=${r.invite_code}`;
+    prompt('邀请链接（发给家人，只能用一次）', link);
+  }
+}
+
+async function openAlbum(id, name){
+  CURRENT_ALBUM = id;
+  $('#albumDetail').style.display = 'block';
+  $('#albumTitle').textContent = name;
+  const photos = await fetch(`/api/albums/${id}/photos`, {headers: apiHeaders()}).then(r=>r.json()).catch(()=>[]);
+  $('#albumPhotos').innerHTML = photos.map(p=>`
+    <div style="position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--panel2)">
+      <img src="/api/photos/${p.id}/thumb" style="width:100%;height:100%;object-fit:cover" loading="lazy">
+      <div style="position:absolute;bottom:0;left:0;right:0;padding:4px 6px;font-size:10px;
+        background:linear-gradient(transparent, rgba(0,0,0,.6));color:#fff">
+        ${esc(p.orig_name||'')}
+      </div>
+    </div>`).join('');
+}
+
+async function uploadToAlbum(){
+  if(!CURRENT_ALBUM){ alert('先选一个相册'); return; }
+  const files = $('#albumFiles').files;
+  if(!files.length){ alert('请选择照片'); return; }
+  const fd = new FormData();
+  for(const f of files) fd.append('files', f);
+  $('#uploadProgress').innerHTML = `<div class="tiny">上传中 ${files.length} 张...</div>`;
+  const r = await fetch(`/api/albums/${CURRENT_ALBUM}/photos`, {method:'POST', headers: apiHeaders(), body: fd}).then(r=>r.json());
+  const ok = r.filter(x=>x.ok).length;
+  $('#uploadProgress').innerHTML = `<div class="tiny" style="color:var(--teal)">上传完成：${ok}/${r.length} 张</div>`;
+  setTimeout(()=>openAlbum(CURRENT_ALBUM, $('#albumTitle').textContent), 1000);
+}
+
+async function downloadAlbum(){
+  if(!CURRENT_ALBUM){ alert('先选一个相册'); return; }
+  window.open(`/api/albums/${CURRENT_ALBUM}/download`, '_blank');
+}
+
 async function loadRecommendations(){
   if(false){
     $('#recList').innerHTML = '<div class="tiny">静态模式下不能加载推荐。请在本地运行 <code>bird serve</code> 后访问 localhost:8765。</div>';
@@ -820,10 +919,11 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
   t.classList.add('on');
   const v = t.dataset.t;
-  ['wall','map','viz','rec','review','run'].forEach(k=>$('#'+k).style.display = k===v?'block':'none');
+  ['wall','map','viz','rec','albums','review','run'].forEach(k=>$('#'+k).style.display = k===v?'block':'none');
   if(v==='map'){ initMap(); setTimeout(()=>MAP&&MAP.invalidateSize(), 60); }
   if(v==='viz') loadViz();
   if(v==='rec') loadRecommendations();
+  if(v==='albums') loadAlbums();
   if(v==='review') loadReview();
   if(v==='run') loadQueue();
 });
@@ -833,6 +933,31 @@ $('#mc').onchange = ()=>{ load(); if($('#viz').style.display!=='none') loadViz()
   if(MAP){ MAP._fit_done=false; loadMap(); } };
 
 load();
+
+// PWA：注册 service worker
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/sw.js').catch(()=>{});
+}
+
+// 邀请链接处理：?invite=xxx
+const inviteMatch = location.search.match(/invite=([a-f0-9]+)/);
+if(inviteMatch){
+  const name = prompt('输入你的名字（例如：妈妈）');
+  if(name){
+    fetch('/api/auth/register', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({invite_code: inviteMatch[1], display_name: name})})
+    .then(r=>r.json())
+    .then(j=>{
+      if(j.api_key){
+        setApiKey(j.api_key);
+        alert(`注册成功！你的 API Key 已保存。\n\n请把下面这个 key 记下来（只显示一次）：\n${j.api_key}`);
+        history.replaceState({}, '', '/');
+      } else {
+        alert('注册失败：' + (j.detail || '未知错误'));
+      }
+    });
+  }
+}
 </script>
 </body>
 </html>

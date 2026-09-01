@@ -6,7 +6,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from . import auth, config, store
@@ -298,3 +298,186 @@ async def api_upload(
         "total_obs": sp["count"] if sp else 1,
         "alternatives": [c["common_name_cn"] for c in res["candidates"][1:3]],
     }
+
+
+# ------------------------------------------------------------------ 家庭共享相册
+from . import sharing
+
+
+def _current_user(request: Request) -> dict:
+    """从 X-API-Key 头解析当前用户（含 owner 的现有 key）。"""
+    key = request.headers.get("X-API-Key", "")
+    user = sharing.get_user_by_key(key)
+    if not user:
+        raise HTTPException(status_code=401, detail="未授权")
+    return user
+
+
+@app.on_event("startup")
+def _init_sharing():
+    sharing.init_sharing()
+
+
+@app.post("/api/auth/login")
+def api_login(body: dict):
+    user = sharing.get_user_by_key(body.get("api_key", ""))
+    if not user:
+        raise HTTPException(status_code=401, detail="API Key 无效")
+    return {"user": {k: user[k] for k in ("id", "username", "display_name", "role")}}
+
+
+@app.post("/api/auth/invite")
+def api_invite(request: Request):
+    key = request.headers.get("X-API-Key", "")
+    inv = sharing.create_invite(key)
+    if not inv:
+        raise HTTPException(status_code=403, detail="只有 owner 能生成邀请码")
+    return inv
+
+
+@app.post("/api/auth/register")
+def api_register(body: dict):
+    r = sharing.register_with_invite(body.get("invite_code", ""),
+                                     body.get("display_name", ""))
+    if not r:
+        raise HTTPException(status_code=400, detail="邀请码无效或已使用")
+    return r
+
+
+@app.get("/api/albums")
+def api_list_albums(request: Request):
+    return sharing.list_albums(_current_user(request))
+
+
+@app.post("/api/albums")
+def api_create_album(request: Request, body: dict):
+    return sharing.create_album(_current_user(request),
+                                body.get("name", ""), body.get("description", ""))
+
+
+@app.get("/api/albums/{album_id}/photos")
+def api_album_photos(album_id: int, request: Request,
+                     limit: int = 200, offset: int = 0):
+    rows = sharing.list_cloud_photos(album_id, _current_user(request), limit, offset)
+    if rows is None:
+        raise HTTPException(status_code=404, detail="相册不存在或无权限")
+    return rows
+
+
+@app.post("/api/albums/{album_id}/photos")
+async def api_upload_to_album(album_id: int, request: Request,
+                              files: list[UploadFile] = File(...)):
+    user = _current_user(request)
+    if not sharing.get_album(album_id, user):
+        raise HTTPException(status_code=404, detail="相册不存在或无权限")
+    results = []
+    for f in files:
+        try:
+            results.append(await _save_cloud_photo(user, album_id, f))
+        except Exception as e:
+            results.append({"ok": False, "name": f.filename, "error": str(e)})
+    return results
+
+
+async def _save_cloud_photo(user: dict, album_id: int, f: UploadFile) -> dict:
+    """保存上传：原图 + 缩略图 + EXIF。"""
+    import uuid
+    from PIL import Image
+    from PIL.ExifTags import TAGS
+    import io, json as _json
+
+    raw = await f.read()
+    ext = Path(f.filename or "x.jpg").suffix.lower() or ".jpg"
+    fname = f"{uuid.uuid4().hex}{ext}"
+    orig_rel = f"orig/{fname}"
+    thumb_rel = f"thumbs/{fname}"
+    (sharing.CLOUD_ORIG / fname).write_bytes(raw)
+
+    width = height = None
+    shot_at = None
+    exif = {}
+    media_type = "video" if ext in (".mp4", ".mov") else "image"
+    if media_type == "image":
+        try:
+            im = Image.open(io.BytesIO(raw))
+            width, height = im.size
+            ex = im.getexif()
+            exif = {TAGS.get(k, k): str(v) for k, v in ex.items()}
+            dt = exif.get("DateTimeOriginal") or exif.get("DateTime")
+            if dt:
+                shot_at = dt.replace(":", "-", 2)
+            # 缩略图 512px
+            im.thumbnail((512, 512))
+            im.convert("RGB").save(sharing.CLOUD_THUMBS / fname, "JPEG", quality=82)
+        except Exception:
+            (sharing.CLOUD_THUMBS / fname).write_bytes(raw[:0])  # 占位
+
+    rec = sharing.add_cloud_photo(
+        user, album_id, filename=fname, orig_name=f.filename,
+        size_bytes=len(raw), width=width, height=height, shot_at=shot_at,
+        media_type=media_type, exif_json=_json.dumps(exif, ensure_ascii=False),
+        thumb_path=thumb_rel, orig_path=orig_rel)
+    return {"ok": True, "id": rec["id"], "name": f.filename}
+
+
+@app.get("/api/photos/{photo_id}")
+def api_cloud_photo(photo_id: int, request: Request):
+    p = sharing.get_cloud_photo(photo_id, _current_user(request))
+    if not p:
+        raise HTTPException(status_code=404, detail="照片不存在")
+    fp = sharing.CLOUD_DIR / p["orig_path"]
+    if not fp.exists():
+        raise HTTPException(status_code=404, detail="文件缺失")
+    return FileResponse(fp)
+
+
+@app.get("/api/photos/{photo_id}/thumb")
+def api_cloud_photo_thumb(photo_id: int, request: Request):
+    p = sharing.get_cloud_photo(photo_id, _current_user(request))
+    if not p:
+        raise HTTPException(status_code=404, detail="照片不存在")
+    fp = sharing.CLOUD_DIR / p["thumb_path"]
+    if not fp.exists() or fp.stat().st_size == 0:
+        fp = sharing.CLOUD_DIR / p["orig_path"]
+    return FileResponse(fp)
+
+
+@app.delete("/api/photos/{photo_id}")
+def api_delete_cloud_photo(photo_id: int, request: Request):
+    if not sharing.delete_cloud_photo(photo_id, _current_user(request)):
+        raise HTTPException(status_code=404, detail="照片不存在或无权限")
+    return {"ok": True}
+
+
+@app.get("/api/albums/{album_id}/download")
+def api_download_album(album_id: int, request: Request):
+    """整本相册打包 zip（流式）。"""
+    import zipfile, tempfile
+    user = _current_user(request)
+    rows = sharing.list_cloud_photos(album_id, user, limit=10000)
+    if rows is None:
+        raise HTTPException(status_code=404, detail="相册不存在或无权限")
+    tmp = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+    with zipfile.ZipFile(tmp.name, "w", zipfile.ZIP_DEFLATED) as z:
+        for p in rows:
+            fp = sharing.CLOUD_DIR / p["orig_path"]
+            if fp.exists():
+                z.write(fp, arcname=p["orig_name"] or p["filename"])
+    return FileResponse(tmp.name, filename=f"album-{album_id}.zip")
+
+
+@app.post("/api/sync/pull")
+def api_sync_pull(request: Request, body: dict):
+    rows = sharing.sync_pull_manifest(_current_user(request), body.get("album_id", 0))
+    if rows is None:
+        raise HTTPException(status_code=404, detail="相册不存在或无权限")
+    return rows
+
+
+@app.post("/api/sync/push")
+def api_sync_push(request: Request, body: dict):
+    """标记照片同步状态。"""
+    _current_user(request)
+    for pid, status in body.get("marks", {}).items():
+        sharing.sync_mark(int(pid), status)
+    return {"ok": True}

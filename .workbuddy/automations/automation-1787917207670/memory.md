@@ -29,3 +29,15 @@
 - 表名/列名备忘：无 `assets` 表（是 `scanned_assets`）；物种中文名是
   `species.common_name_cn`，不是 `common_name`；`in_china`：-1 未知 / 0 否 / 1 是。
 - 观察：`new_assets` 字段仍是库内总数，真正新增数看日志「待检测 N」行。
+
+## 2026-08-30 21:00
+- 第 3 次执行。照片库 15,485（+2），L0 待检测 2，L1 均未检出动物，l2_kept=0。
+- 先查 `id_queue pending = 0`，按上次教训确认无积压，**正确地未跑 `auto`**。
+- 新增鸟种 0 / 新增观测 0。库存：鸟种 384 / 观测 510 / 照片 2,251 / 已扫 15,510。
+- 待复核（<0.45）443 条（in_china=0 的 275 / =1 的 165 / 未知 3），与上次持平，无变化。
+
+### 口径修正（重要，覆盖 08-28 记录）
+- **置信度列是 `observations.confidence`**。此前记录写的 `photos.confidence` 是错的
+  （photos 表无该列），`id_queue.result_conf` 也不存在 —— id_queue 的置信度在
+  `result_json` 的 JSON 串里。统计全库待复核数一律用 observations 表（观测粒度）。
+- 判断顺序固化为：scan → 查 `id_queue pending`（非看 l2_kept）→ 有积压才跑 auto → 查 observations 报数。

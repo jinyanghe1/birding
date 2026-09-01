@@ -37,6 +37,58 @@
   但**本沙箱内 launchctl 注册被拦截**，需要用户在沙箱外手动 load。
 - 当前实际生效的是 WorkBuddy automation：`automation-1787917207670`（每天 21:00）。
 
+## 部署架构（2026-08-29 新增）
+
+**生产环境**：腾讯云轻量应用服务器（124.223.171.149）
+- **架构**：Nginx (80) → FastAPI (8765) → SQLite
+- **systemd 服务**：`/etc/systemd/system/birding.service`（自动重启）
+- **一键部署**：`./scripts/deploy_to_server.sh [--data]`
+- **访问地址**：http://124.223.171.149
+- **详细文档**：`docs/腾讯云部署指南.md`
+- **控制台信息（Lighthouse MCP 已连接，2026-08-31 确认）**：
+  - InstanceId `lhins-3jodviz2`，名称 Ubuntu-1GSt，地域 **ap-shanghai**（不是北京）
+  - 套餐 bundle_starter_mc_promo_med2_01：2 核 2GB / 40GB SSD / 3Mbps，包年包月
+  - 到期 2027-08-29，续费方式 NOTIFY_AND_MANUAL_RENEW
+  - 流量包：**200GB/月**（周期每月 29 日重置），实际用量 <30MB/月，无超额
+  - 控制台防火墙：只放行 22(SSH)/80(HTTP)/ICMP，与安全协议一致；实例内 ufw 未启用（不重复开）
+  - 快照：**无任何快照**，安全协议里「每天凌晨 3 点备份」尚未落地
+
+**本地开发**：localhost:8765
+- 扫描/识别/复核/手动导入都在本地做
+- 数据更新后跑 `bird export-site` → `./scripts/deploy_to_server.sh --data` 同步到服务器
+
+**GitHub Pages**：https://jinyanghe1.github.io/birding/
+- 只读分享，不能上传
+- 静态导出：`bird export-site` → `docs/` → push
+
+## 关键经验（来自本次部署）
+
+1. **SSH 用户是 `ubuntu` 不是 `root`**（腾讯云 Ubuntu 默认）
+2. **FastAPI 需要 `python-multipart`**（处理文件上传）
+3. **macOS tar 有扩展属性**，Linux 解压会报 `LIBARCHIVE.xattr` 警告（不影响功能）
+4. **数据目录结构**：`data/birds.db` + `data/thumbs/`，打包时分开传（代码 63KB，数据 37MB）
+5. **Nginx 反向代理**：`proxy_pass http://127.0.0.1:8765`，超时时间要设长（300s）
+
+## 安全协议（长期记忆，上线服务必守）
+
+**上线的服务要严守网络安全底线**：
+- 所有写操作必须有鉴权（已实现：API Key，写操作需要 `X-API-Key` 请求头）
+- 所有密钥/Token 必须放在 `data/secrets/` 或环境变量，不进 git
+- 定期审查端口开放（只开 80/443/22）
+- 定期备份数据（每天凌晨 3 点）
+
+## 关键经验（来自本次部署）
+
+1. **SSH 用户是 `ubuntu` 不是 `root`**（腾讯云 Ubuntu 默认）
+2. **FastAPI 需要 `python-multipart`**（处理文件上传）
+3. **macOS tar 有扩展属性**，Linux 解压会报 `LIBARCHIVE.xattr` 警告（不影响功能）
+4. **数据目录结构**：`data/birds.db` + `data/thumbs/`，打包时分开传（代码 63KB，数据 37MB）
+5. **Nginx 反向代理**：`proxy_pass http://127.0.0.1:8765`，超时时间要设长（300s）
+6. **Linux 权限链**：`www-data` 要读 `/home/ubuntu/...`，每一级目录都要 `chmod 755`
+7. **百度地图瓦片免 key**：`maponline{s}.bdimg.com/tile/?qt=tile&x={x}&y={y}&z={z}&styles=pl&scaler=1`
+
 ## 参考文档
 - 完整方案：`MVP开发方案.md`（含 DDL、模块规格、P0–P4 里程碑、风险清单）
 - 使用说明：`README.md`
+- 部署指南：`docs/腾讯云部署指南.md`
+- 部署 SOP：`.workbuddy/skills/birding-deploy/SKILL.md`

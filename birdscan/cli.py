@@ -218,6 +218,80 @@ def cmd_serve(a) -> int:
     return 0
 
 
+def cmd_sync(a) -> int:
+    """本地↔云端双向同步。"""
+    import urllib.request
+    import json as _json
+
+    key_file = config.DATA_DIR / ".api_key"
+    key = key_file.read_text().strip() if key_file.exists() else "dev-key"
+    headers = {"X-API-Key": key, "Content-Type": "application/json"}
+
+    if a.action == "status":
+        r = urllib.request.Request(f"{a.server}/api/sync/pull",
+            data=_json.dumps({"album_id": a.album}).encode(), headers=headers)
+        with urllib.request.urlopen(r) as resp:
+            rows = _json.loads(resp.read())
+        print(f"云端相册 {a.album}：{len(rows)} 张")
+        return 0
+
+    if a.action == "pull":
+        if not a.dir:
+            print("错误：pull 需要 --dir 指定本地目录")
+            return 1
+        local_dir = Path(a.dir)
+        local_dir.mkdir(parents=True, exist_ok=True)
+        r = urllib.request.Request(f"{a.server}/api/sync/pull",
+            data=_json.dumps({"album_id": a.album}).encode(), headers=headers)
+        with urllib.request.urlopen(r) as resp:
+            rows = _json.loads(resp.read())
+        downloaded = 0
+        for p in rows:
+            local_file = local_dir / (p["orig_name"] or p["filename"])
+            if local_file.exists():
+                continue
+            img_r = urllib.request.Request(
+                f"{a.server}/api/photos/{p['id']}", headers=headers)
+            with urllib.request.urlopen(img_r) as resp:
+                local_file.write_bytes(resp.read())
+            downloaded += 1
+        print(f"下载完成：{downloaded} 张到 {local_dir}")
+        return 0
+
+    if a.action == "push":
+        if not a.dir:
+            print("错误：push 需要 --dir 指定本地目录")
+            return 1
+        local_dir = Path(a.dir)
+        if not local_dir.exists():
+            print(f"错误：目录不存在 {local_dir}")
+            return 1
+        files = [f for f in local_dir.iterdir()
+                 if f.suffix.lower() in (".jpg", ".jpeg", ".png", ".heic", ".webp", ".mp4", ".mov")]
+        if not files:
+            print("目录里没有可上传的文件")
+            return 0
+        print(f"上传 {len(files)} 张到相册 {a.album}...")
+        # 用 multipart 上传
+        import http.client
+        boundary = "----birdsync"
+        body = b""
+        for f in files:
+            body += f"--{boundary}\r\n".encode()
+            body += f'Content-Disposition: form-data; name="files"; filename="{f.name}"\r\n'.encode()
+            body += b"Content-Type: application/octet-stream\r\n\r\n"
+            body += f.read_bytes() + b"\r\n"
+        body += f"--{boundary}--\r\n".encode()
+        req = urllib.request.Request(
+            f"{a.server}/api/albums/{a.album}/photos",
+            data=body, headers={**headers, "Content-Type": f"multipart/form-data; boundary={boundary}"})
+        with urllib.request.urlopen(req) as resp:
+            results = _json.loads(resp.read())
+        ok = sum(1 for r in results if r.get("ok"))
+        print(f"上传完成：{ok}/{len(results)} 张")
+        return 0
+
+
 def cmd_probe(a) -> int:
     """只读探针：打印照片库画像，不做任何写入。"""
     from . import photos as ph
@@ -328,6 +402,13 @@ def main(argv=None) -> int:
     s = sub.add_parser("serve", help="启动网页")
     s.add_argument("--port", type=int, default=config.WEB_PORT)
     s.set_defaults(fn=cmd_serve)
+
+    s = sub.add_parser("sync", help="本地↔云端双向同步")
+    s.add_argument("action", choices=["pull", "push", "status"])
+    s.add_argument("--album", type=int, required=True, help="相册 ID")
+    s.add_argument("--server", default="http://124.223.171.149")
+    s.add_argument("--dir", default="", help="本地目录（pull 下载到这里 / push 从这里上传）")
+    s.set_defaults(fn=cmd_sync)
 
     a = p.parse_args(argv)
     _setup(a.verbose)

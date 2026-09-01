@@ -506,6 +506,26 @@ def api_download_album(album_id: int, request: Request):
     return FileResponse(tmp.name, filename=f"album-{album_id}.zip")
 
 
+@app.delete("/api/albums/{album_id}")
+def api_delete_album(album_id: int, request: Request):
+    """删除相册（需鉴权，owner 或相册创建者）。"""
+    user = _current_user(request)
+    album = sharing.get_album(album_id, user)
+    if not album:
+        raise HTTPException(status_code=404, detail="相册不存在或无权限")
+    
+    # 只有 owner 或相册创建者能删除
+    if user["role"] != "owner" and album["owner_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="只有相册创建者能删除")
+    
+    # 删除相册里的照片关联
+    with store.conn_ctx() as con:
+        con.execute("DELETE FROM album_photos WHERE album_id=?", (album_id,))
+        con.execute("DELETE FROM albums WHERE id=?", (album_id,))
+    
+    return {"ok": True, "deleted_album": album["name"]}
+
+
 @app.post("/api/sync/pull")
 def api_sync_pull(request: Request, body: dict):
     rows = sharing.sync_pull_manifest(_current_user(request), body.get("album_id", 0))

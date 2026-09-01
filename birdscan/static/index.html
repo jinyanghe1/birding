@@ -3,37 +3,41 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#3fbfa0">
+<meta name="theme-color" content="var(--teal)">
 <link rel="manifest" href="/manifest.json">
 <title>我的观鸟档案</title>
 <style>
 :root{
-  --bg:#14161a; --panel:#1c1f26; --panel2:#22262f; --line:#2e333d;
-  --tx:#e6e8ec; --tx2:#9aa2b0; --tx3:#6b7382;
-  --teal:#3fbfa0; --amber:#e8a33d; --red:#e2585a;
+  /* 亮色主题（Apple Photos 风格） */
+  --bg:#f5f5f7; --panel:#ffffff; --panel2:#f5f5f7; --line:#d2d2d7;
+  --tx:#1d1d1f; --tx2:#6e6e73; --tx3:#86868b;
+  --teal:#007aff; --amber:#ff9500; --red:#ff3b30;
+  --shadow:0 2px 8px rgba(0,0,0,.08);
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);
   font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
 a{color:var(--teal);text-decoration:none}
 .wrap{max-width:1280px;margin:0 auto;padding:24px 20px 60px}
-h1{font-size:20px;font-weight:500;margin:0}
-h2{font-size:15px;font-weight:500;margin:0 0 14px;color:var(--tx)}
-h3{font-size:13px;font-weight:500;margin:0 0 10px;color:var(--tx2)}
+h1{font-size:20px;font-weight:600;margin:0;color:var(--tx)}
+h2{font-size:15px;font-weight:600;margin:0 0 14px;color:var(--tx)}
+h3{font-size:13px;font-weight:600;margin:0 0 10px;color:var(--tx2)}
 .muted{color:var(--tx2)}.tiny{font-size:12px;color:var(--tx3)}
 
 header{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:18px}
 header .sp{flex:1}
 
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:20px}
-.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
-.stat .n{font-size:24px;font-weight:500;line-height:1.2}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;
+  box-shadow:var(--shadow)}
+.stat .n{font-size:24px;font-weight:600;line-height:1.2;color:var(--tx)}
 .stat .l{font-size:12px;color:var(--tx3)}
 
 .tabs{display:flex;gap:4px;margin-bottom:18px;border-bottom:1px solid var(--line)}
-.tab{padding:8px 14px;cursor:pointer;color:var(--tx2);border-bottom:2px solid transparent;font-size:13px}
-.tab.on{color:var(--tx);border-bottom-color:var(--teal)}
-.tab:hover{color:var(--tx)}
+.tab{padding:10px 16px;cursor:pointer;color:var(--tx2);border-bottom:2px solid transparent;
+  font-size:14px;font-weight:500;transition:all .2s}
+.tab.on{color:var(--teal);border-bottom-color:var(--teal)}
+.tab:hover{color:var(--tx);background:var(--panel2);border-radius:8px 8px 0 0}
 
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;
@@ -47,11 +51,12 @@ header .sp{flex:1}
 .card .ft{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:var(--tx3)}
 .badge{background:rgba(63,191,160,.14);color:var(--teal);padding:1px 7px;border-radius:20px;font-size:11px}
 
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:16px;
+  box-shadow:var(--shadow)}
 .viz{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px}
 
 .cal{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);gap:2px;overflow-x:auto;padding-bottom:4px}
-.cal i{width:11px;height:11px;border-radius:2px;background:#232730;display:block}
+.cal i{width:11px;height:11px;border-radius:2px;background:#e8e8ed;display:block}
 .cal i.d{background:transparent}
 .lg{display:flex;align-items:center;gap:5px;margin-top:10px;font-size:11px;color:var(--tx3)}
 .lg i{width:10px;height:10px;border-radius:2px;display:block}
@@ -126,14 +131,14 @@ input{flex:1;max-width:280px}
 .reviewItem .acts button{padding:5px 12px;border-radius:7px;border:1px solid var(--line);
   background:var(--panel2);color:var(--tx);font:500 12px inherit;cursor:pointer}
 .reviewItem .acts button.danger{background:rgba(226,88,90,.15);color:var(--red);border-color:rgba(226,88,90,.3)}
-.reviewItem .acts button.primary{background:var(--teal);color:#0d1a17;border:0}
+.reviewItem .acts button.primary{background:var(--teal);color:#fff;border:0}
 .reviewItem .acts button:hover{filter:brightness(1.1)}
 .reassignBox{display:flex;gap:6px;margin-top:8px}
 .reassignBox input{flex:1;padding:5px 10px;border-radius:7px;border:1px solid var(--line);
   background:var(--panel2);color:var(--tx);font:12px inherit}
 
 /* ---------------- 加新上传弹窗 */
-#addBtn{background:var(--teal);color:#0d1a17;border:0;border-radius:8px;
+#addBtn{background:var(--teal);color:#fff;border:0;border-radius:8px;
   padding:8px 16px;font:500 13px inherit;cursor:pointer;white-space:nowrap}
 #addBtn:hover{filter:brightness(1.1)}
 #addModal{display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
@@ -147,7 +152,7 @@ input{flex:1;max-width:280px}
 #addModal .act{display:flex;gap:8px;margin-top:16px}
 #addModal .act button{flex:1;padding:9px;border-radius:8px;border:1px solid var(--line);
   background:var(--panel2);color:var(--tx);font:500 13px inherit;cursor:pointer}
-#addModal .act button.primary{background:var(--teal);color:#0d1a17;border:0}
+#addModal .act button.primary{background:var(--teal);color:#fff;border:0}
 #addModal .act button:disabled{opacity:.5;cursor:not-allowed}
 #addResult{margin-top:14px;font-size:13px;line-height:1.6;display:none}
 #addResult.ok{color:var(--teal)} #addResult.err{color:var(--red)}
@@ -208,8 +213,8 @@ input{flex:1;max-width:280px}
         </div>
         <div class="cal" id="cal"></div>
         <div class="lg"><span>少</span>
-          <i style="background:#232730"></i><i style="background:#1e5a4c"></i>
-          <i style="background:#2a8a72"></i><i style="background:#3fbfa0"></i>
+          <i style="background:#e8e8ed"></i><i style="background:#c7e5ff"></i>
+          <i style="background:#7cc4ff"></i><i style="background:#007aff"></i>
           <span>多</span>
         </div>
       </div>
@@ -245,7 +250,7 @@ input{flex:1;max-width:280px}
       <div style="display:flex;gap:8px;margin:10px 0">
         <input id="newAlbumName" placeholder="新相册名（例如：深圳湾 2026 春）" style="flex:1;padding:8px;border-radius:8px;
           border:1px solid var(--line);background:var(--panel2);color:var(--tx);font:13px inherit">
-        <button onclick="createAlbum()" style="background:var(--teal);color:#0d1a17;border:0;
+        <button onclick="createAlbum()" style="background:var(--teal);color:#fff;border:0;
           border-radius:8px;padding:8px 16px;font:500 13px inherit;cursor:pointer" title="创建新相册，默认只有你能看到">创建相册</button>
         <button onclick="showInviteModal()" style="background:var(--panel2);color:var(--tx);border:1px solid var(--line);
           border-radius:8px;padding:8px 16px;font:500 13px inherit;cursor:pointer" title="生成邀请链接，家人注册后只能看到你勾选的相册">邀请家人</button>
@@ -255,7 +260,7 @@ input{flex:1;max-width:280px}
         <h3 id="albumTitle"></h3>
         <div style="display:flex;gap:8px;margin:10px 0">
           <input type="file" id="albumFiles" accept="image/*,video/*" multiple style="flex:1">
-          <button onclick="uploadToAlbum()" style="background:var(--teal);color:#0d1a17;border:0;
+          <button onclick="uploadToAlbum()" style="background:var(--teal);color:#fff;border:0;
             border-radius:8px;padding:8px 16px;font:500 13px inherit;cursor:pointer">批量上传</button>
           <button onclick="downloadAlbum()" style="background:var(--panel2);color:var(--tx);border:1px solid var(--line);
             border-radius:8px;padding:8px 16px;font:500 13px inherit;cursor:pointer">下载整本</button>
@@ -300,7 +305,7 @@ input{flex:1;max-width:280px}
       <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
         <input id="lim" type="number" placeholder="限制张数（留空=全部）" style="max-width:200px">
         <label class="tiny"><input type="checkbox" id="frc" style="max-width:auto"> 忽略水位线重扫</label>
-        <button id="btnScan" style="background:var(--teal);color:#0d1a17;border:0;
+        <button id="btnScan" style="background:var(--teal);color:#fff;border:0;
           border-radius:7px;padding:8px 16px;font:500 13px inherit;cursor:pointer">开始扫描</button>
       </div>
       <pre id="scanOut" class="tiny" style="white-space:pre-wrap;margin-top:12px;display:none"></pre>
@@ -347,7 +352,7 @@ input{flex:1;max-width:280px}
   <div id="inviteResult" style="display:none;margin-top:16px;padding:12px;background:var(--panel2);border-radius:8px">
     <div class="tiny">邀请链接（发给家人，只能用一次）：</div>
     <div id="inviteLink" style="font-family:monospace;font-size:12px;word-break:break-all;margin:8px 0"></div>
-    <button onclick="copyInviteLink()" style="background:var(--teal);color:#0d1a17;border:0;
+    <button onclick="copyInviteLink()" style="background:var(--teal);color:#fff;border:0;
       border-radius:6px;padding:6px 12px;font:12px inherit;cursor:pointer">复制链接</button>
   </div>
 </div>
@@ -549,7 +554,7 @@ async function loadViz(){
     for(let d=new Date(first); d<=last; d.setDate(d.getDate()+1)){
       const iso = d.toISOString().slice(0,10);
       const c = map[iso]||0;
-      const bg = c===0?'#232730': c===1?'#1e5a4c': c===2?'#2a8a72':'#3fbfa0';
+      const bg = c===0?'#e8e8ed': c===1?'#c7e5ff': c===2?'#7cc4ff':'#007aff';
       cells += `<i style="background:${bg}" title="${iso}: ${c} 次"></i>`;
     }
     $('#cal').innerHTML = cells;
@@ -575,7 +580,7 @@ async function loadViz(){
       return `${x.toFixed(1)},${yy.toFixed(1)}`;
     }).join(' ');
     $('#tl').innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="150">
-      <polyline points="${pts}" fill="none" stroke="#3fbfa0" stroke-width="1.8"/>
+      <polyline points="${pts}" fill="none" stroke="var(--teal)" stroke-width="1.8"/>
       <text x="${P}" y="14" fill="#6b7382" font-size="10">${maxN} 种</text>
       <text x="${P}" y="${H-6}" fill="#6b7382" font-size="10">${esc(tl[0].date)}</text>
       <text x="${W-P}" y="${H-6}" fill="#6b7382" font-size="10" text-anchor="end">${esc(tl[tl.length-1].date)}</text>
@@ -614,7 +619,7 @@ async function loadViz(){
       <div style="width:80px;font-size:12px;${overdue?'color:var(--amber);font-weight:500':''}">${esc(s.name)}${overdue?' 🔥':''}</div>
       <div style="display:flex;gap:2px;flex:1">${months.map((c,i)=>{
         const m = i+1;
-        const bg = c===0 ? 'var(--panel2)' : c>=avg ? '#3fbfa0' : '#2a8a72';
+        const bg = c===0 ? 'var(--panel2)' : c>=avg ? 'var(--teal)' : '#7cc4ff';
         const hl = m===now ? 'outline:1.5px solid var(--amber)' : '';
         return `<div style="flex:1;height:18px;border-radius:3px;background:${bg};${hl}"
           title="${m}月: ${c} 次${overdue && m===now?'（该出门了）':''}"></div>`;
@@ -998,10 +1003,10 @@ async function loadMap(){
                   object-fit:cover;border:2px solid rgba(255,255,255,.9);
                   box-shadow:0 2px 8px rgba(0,0,0,.4)">
                 ${p.n>1?`<div style="position:absolute;top:-4px;right:-4px;width:20px;height:20px;
-                  border-radius:50%;background:#3fbfa0;color:#0d1a17;font:600 11px/20px system-ui;
+                  border-radius:50%;background:var(--teal);color:#fff;font:600 11px/20px system-ui;
                   text-align:center;border:2px solid #14161a">${p.n}</div>`:''}
-              `:`<div style="width:100%;height:100%;border-radius:50%;background:#3fbfa0;
-                  display:flex;align-items:center;justify-content:center;color:#0d1a17;
+              `:`<div style="width:100%;height:100%;border-radius:50%;background:var(--teal);
+                  display:flex;align-items:center;justify-content:center;color:#fff;
                   font:600 12px system-ui;border:2px solid rgba(255,255,255,.9)">${p.n}</div>`}
             </div>`,
       iconSize:[size,size], iconAnchor:[size/2,size/2]

@@ -68,8 +68,25 @@
 3. **macOS tar 有扩展属性**，Linux 解压会报 `LIBARCHIVE.xattr` 警告（不影响功能）
 4. **数据目录结构**：`data/birds.db` + `data/thumbs/`，打包时分开传（代码 63KB，数据 37MB）
 5. **Nginx 反向代理**：`proxy_pass http://127.0.0.1:8765`，超时时间要设长（300s）
+6. **Linux 权限链**：`www-data` 要读 `/home/ubuntu/...`，每一级目录都要 `chmod 755`
+7. **百度地图瓦片免 key**：`maponline{s}.bdimg.com/tile/?qt=tile&x={x}&y={y}&z={z}&styles=pl&scaler=1`
+8. **OSM 地图瓦片免 key**：`https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png`，公共服务器无需注册
 
-## 安全协议（长期记忆，上线服务必守）
+## 开发规范（长期记忆，必须遵守）
+
+**服务器直接开发调试**（2026-09-01 更新）：
+1. **本地写代码** → 本地简单验证（语法/导入）
+2. **push 到 GitHub**（细粒度 commit，一个功能一个 commit）
+3. **服务器直接调试**：`ssh` 到服务器，`git pull` 后直接改代码调试
+4. **调试通过后** → 服务器上 commit + push 回 GitHub
+5. **本地同步**：`git pull` 保持本地与服务器一致
+
+**CI/CD 自动化**：
+- 每次 commit 后自动触发 GitHub Actions
+- 检测：版本管理、commit 树、服务器实测、单测
+- 失败自动回滚
+
+**安全协议**（延续）：
 
 **上线的服务要严守网络安全底线**：
 - 所有写操作必须有鉴权（已实现：API Key，写操作需要 `X-API-Key` 请求头）

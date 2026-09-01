@@ -236,12 +236,18 @@ input{flex:1;max-width:280px}
     <div class="panel">
       <h2>家庭相册</h2>
       <p class="tiny">家人共享的观鸟相册。点 🔑 设置 API Key 后可上传。</p>
+      
+      <!-- 相册二级 tab -->
+      <div style="display:flex;gap:6px;margin:12px 0;flex-wrap:wrap" id="albumTabs">
+        <div class="tab" data-album="all" style="padding:6px 12px;font-size:12px">全部</div>
+      </div>
+      
       <div style="display:flex;gap:8px;margin:10px 0">
         <input id="newAlbumName" placeholder="新相册名" style="flex:1;padding:8px;border-radius:8px;
           border:1px solid var(--line);background:var(--panel2);color:var(--tx);font:13px inherit">
         <button onclick="createAlbum()" style="background:var(--teal);color:#0d1a17;border:0;
           border-radius:8px;padding:8px 16px;font:500 13px inherit;cursor:pointer">创建相册</button>
-        <button onclick="inviteFamily()" style="background:var(--panel2);color:var(--tx);border:1px solid var(--line);
+        <button onclick="showInviteModal()" style="background:var(--panel2);color:var(--tx);border:1px solid var(--line);
           border-radius:8px;padding:8px 16px;font:500 13px inherit;cursor:pointer">邀请家人</button>
       </div>
       <div id="albumList"></div>
@@ -323,6 +329,27 @@ input{flex:1;max-width:280px}
   </div>
 </div>
 
+<!-- 邀请码弹窗 -->
+<div id="inviteModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:min(500px,92vw);background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  z-index:60;padding:22px">
+  <h2>邀请家人</h2>
+  <div class="row">
+    <label>选择相册权限（默认全选）</label>
+    <div id="inviteAlbums" style="max-height:200px;overflow-y:auto;margin:10px 0"></div>
+  </div>
+  <div class="act">
+    <button onclick="closeInviteModal()">取消</button>
+    <button class="primary" onclick="generateInvite()">生成邀请码</button>
+  </div>
+  <div id="inviteResult" style="display:none;margin-top:16px;padding:12px;background:var(--panel2);border-radius:8px">
+    <div class="tiny">邀请链接（发给家人，只能用一次）：</div>
+    <div id="inviteLink" style="font-family:monospace;font-size:12px;word-break:break-all;margin:8px 0"></div>
+    <button onclick="copyInviteLink()" style="background:var(--teal);color:#0d1a17;border:0;
+      border-radius:6px;padding:6px 12px;font:12px inherit;cursor:pointer">复制链接</button>
+  </div>
+</div>
+
 <div id="addModal">
   <h2>加新</h2>
   <div class="row">
@@ -348,6 +375,7 @@ input{flex:1;max-width:280px}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 // STATIC_MODE = true 时走静态 JSON（GitHub Pages），false 时走 FastAPI（localhost）
 const STATIC_MODE = false;  // 服务器部署，始终走动态 API
@@ -618,18 +646,61 @@ $('#btnScan').onclick = async ()=>{
 // ---------------------------------------------------------------- 推荐清单
 // ---------------------------------------------------------------- 家庭相册
 let CURRENT_ALBUM = null;
+let ALBUMS = [];
 
 async function loadAlbums(){
-  const albums = await fetch('/api/albums', {headers: apiHeaders()}).then(r=>r.json()).catch(()=>[]);
-  if(!albums.length){
+  if(!getApiKey()){
+    $('#albumList').innerHTML = '<div class="tiny" style="color:var(--amber)">请先点右上角 🔑 设置 API Key</div>';
+    return;
+  }
+  ALBUMS = await fetch('/api/albums', {headers: apiHeaders()}).then(r=>r.json()).catch(()=>[]);
+  
+  // 渲染相册 tab
+  const tabsHtml = ['<div class="tab on" data-album="all" style="padding:6px 12px;font-size:12px">全部</div>']
+    .concat(ALBUMS.map(a=>`<div class="tab" data-album="${a.id}" style="padding:6px 12px;font-size:12px">${esc(a.name)}</div>`))
+    .join('');
+  $('#albumTabs').innerHTML = tabsHtml;
+  
+  // 绑定 tab 切换
+  $$('#albumTabs .tab').forEach(t=>{
+    t.onclick = ()=>{
+      $$('#albumTabs .tab').forEach(x=>x.classList.remove('on'));
+      t.classList.add('on');
+      const albumId = t.dataset.album;
+      if(albumId === 'all'){
+        loadAllPhotos();
+      } else {
+        openAlbum(parseInt(albumId), ALBUMS.find(a=>a.id==albumId)?.name || '');
+      }
+    };
+  });
+  
+  if(!ALBUMS.length){
     $('#albumList').innerHTML = '<div class="tiny">还没有相册。创建一个，或点「邀请家人」生成邀请链接。</div>';
     return;
   }
-  $('#albumList').innerHTML = albums.map(a=>`
-    <div class="reviewItem" style="cursor:pointer" onclick="openAlbum(${a.id}, '${esc(a.name)}')">
+  
+  // 默认显示全部
+  loadAllPhotos();
+}
+
+async function loadAllPhotos(){
+  // 聚合所有相册的照片
+  const allPhotos = [];
+  for(const a of ALBUMS){
+    const photos = await fetch(`/api/albums/${a.id}/photos`, {headers: apiHeaders()}).then(r=>r.json()).catch(()=>[]);
+    allPhotos.push(...photos.map(p=>({...p, album_name: a.name})));
+  }
+  renderPhotos(allPhotos);
+}
+
+function renderPhotos(photos){
+  $('#albumList').innerHTML = photos.map(p=>`
+    <div class="reviewItem" style="cursor:pointer" onclick="window.open('/api/photos/${p.id}')">
+      <img src="/api/photos/${p.id}/thumb" style="width:80px;height:80px;border-radius:8px;object-fit:cover" loading="lazy">
       <div class="info">
-        <div class="nm">${esc(a.name)} <span class="conf">${a.photo_count} 张</span></div>
-        <div class="meta">${esc(a.owner_name)} · ${esc(a.created_at||'').slice(0,10)}</div>
+        <div class="nm">${esc(p.orig_name||'')} <span class="conf">${esc(p.album_name||'')}</span></div>
+        <div class="meta">${esc(p.uploader_name||'')} · ${esc(p.created_at||'').slice(0,10)}</div>
       </div>
     </div>`).join('');
 }
@@ -643,12 +714,64 @@ async function createAlbum(){
   loadAlbums();
 }
 
-async function inviteFamily(){
-  const r = await fetch('/api/auth/invite', {method:'POST', headers: apiHeaders()}).then(r=>r.json());
-  if(r.invite_code){
-    const link = `${location.origin}/?invite=${r.invite_code}`;
-    prompt('邀请链接（发给家人，只能用一次）', link);
+// 邀请码弹窗
+function showInviteModal(){
+  $('#inviteModal').style.display='block';
+  // 渲染相册勾选
+  $('#inviteAlbums').innerHTML = ALBUMS.map(a=>`
+    <label style="display:flex;align-items:center;gap:8px;padding:6px 0">
+      <input type="checkbox" value="${a.id}" checked> ${esc(a.name)}
+    </label>`).join('');
+}
+
+function closeInviteModal(){
+  $('#inviteModal').style.display='none';
+  $('#inviteResult').style.display='none';
+}
+
+async function generateInvite(){
+  const checked = Array.from($('#inviteAlbums').querySelectorAll('input:checked')).map(i=>parseInt(i.value));
+  if(!checked.length){ alert('请至少勾选一个相册'); return; }
+  
+  const r = await fetch('/api/invites', {method:'POST', headers: {...apiHeaders(), 'Content-Type':'application/json'},
+    body: JSON.stringify({album_ids: checked, max_uses: 1})}).then(r=>r.json());
+  
+  if(r.code){
+    const link = `${location.origin}/?invite=${r.code}`;
+    $('#inviteLink').textContent = link;
+    $('#inviteResult').style.display='block';
+  } else {
+    alert('生成失败：' + (r.detail || '未知错误'));
   }
+}
+
+function copyInviteLink(){
+  const link = $('#inviteLink').textContent;
+  navigator.clipboard.writeText(link).then(()=>{
+    alert('链接已复制');
+  });
+}
+
+async function openAlbum(id, name){
+  CURRENT_ALBUM = id;
+  $('#albumDetail').style.display = 'block';
+  $('#albumTitle').textContent = name;
+  const photos = await fetch(`/api/albums/${id}/photos`, {headers: apiHeaders()}).then(r=>r.json()).catch(()=>[]);
+  renderPhotos(photos);
+}
+
+async function uploadToAlbum(){
+  if(!CURRENT_ALBUM){ alert('先选一个相册'); return; }
+  const files = $('#albumFiles').files;
+  if(!files.length){ alert('请选择照片'); return; }
+  const fd = new FormData();
+  for(const f of files) fd.append('files', f);
+  $('#uploadProgress').innerHTML = `<div class="tiny">上传中 ${files.length} 张...</div>`;
+  const r = await fetch(`/api/albums/${CURRENT_ALBUM}/photos`, {method:'POST', headers: apiHeaders(), body: fd}).then(r=>r.json());
+  const ok = r.filter(x=>x.ok).length;
+  const dup = r.filter(x=>x.duplicate).length;
+  $('#uploadProgress').innerHTML = `<div class="tiny" style="color:var(--teal)">上传完成：${ok} 张成功${dup>0?`，${dup} 张重复已跳过`:''}</div>`;
+  setTimeout(()=>openAlbum(CURRENT_ALBUM, $('#albumTitle').textContent), 1000);
 }
 
 async function openAlbum(id, name){

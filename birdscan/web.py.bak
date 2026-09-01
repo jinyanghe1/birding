@@ -1,7 +1,6 @@
 """FastAPI 网页服务端。图片通过 /img 代理，浏览器才能访问 Photos 库内的文件。"""
 from __future__ import annotations
 
-import json
 import os
 import sqlite3
 from datetime import datetime
@@ -318,7 +317,7 @@ async def api_upload(
 
 
 # ------------------------------------------------------------------ 家庭共享相册
-from . import sharing_v2 as sharing
+from . import sharing
 
 
 def _current_user(request: Request) -> dict:
@@ -343,32 +342,21 @@ def api_login(body: dict):
     return {"user": {k: user[k] for k in ("id", "username", "display_name", "role")}}
 
 
-@app.post("/api/invites")
-def api_create_invite(request: Request, body: dict):
+@app.post("/api/auth/invite")
+def api_invite(request: Request):
     key = request.headers.get("X-API-Key", "")
-    inv = sharing.create_invite(key, body.get("album_ids", []), body.get("max_uses", 1))
+    inv = sharing.create_invite(key)
     if not inv:
         raise HTTPException(status_code=403, detail="只有 owner 能生成邀请码")
     return inv
 
 
-@app.get("/api/invites/{code}")
-def api_check_invite(code: str):
-    """验证邀请码有效性（不消耗）。"""
-    with store.conn_ctx(readonly=True) as con:
-        inv = con.execute(
-            "SELECT * FROM invites WHERE code=? AND used_count < max_uses",
-            (code,)).fetchone()
-        if not inv:
-            raise HTTPException(status_code=404, detail="邀请码无效或已用完")
-        return {"valid": True, "album_ids": json.loads(inv["album_ids"])}
-
-
-@app.post("/api/invites/{code}/use")
-def api_use_invite(code: str, body: dict):
-    r = sharing.use_invite(code, body.get("display_name", ""))
+@app.post("/api/auth/register")
+def api_register(body: dict):
+    r = sharing.register_with_invite(body.get("invite_code", ""),
+                                     body.get("display_name", ""))
     if not r:
-        raise HTTPException(status_code=400, detail="邀请码无效或已用完")
+        raise HTTPException(status_code=400, detail="邀请码无效或已使用")
     return r
 
 
@@ -408,25 +396,13 @@ async def api_upload_to_album(album_id: int, request: Request,
 
 
 async def _save_cloud_photo(user: dict, album_id: int, f: UploadFile) -> dict:
-    """保存上传：原图 + 缩略图 + EXIF + 哈希去重。"""
+    """保存上传：原图 + 缩略图 + EXIF。"""
     import uuid
-    import hashlib
     from PIL import Image
     from PIL.ExifTags import TAGS
     import io, json as _json
 
     raw = await f.read()
-    # 计算 SHA256 用于去重
-    file_hash = hashlib.sha256(raw).hexdigest()
-    
-    # 检查是否已存在
-    existing = sharing.get_photo_by_hash(file_hash)
-    if existing:
-        # 已存在：只加关联，不重复存储
-        sharing.add_photo_to_album(existing["id"], album_id, user)
-        return {"ok": True, "id": existing["id"], "name": f.filename, "duplicate": True}
-    
-    # 不存在：存原图 + 缩略图
     ext = Path(f.filename or "x.jpg").suffix.lower() or ".jpg"
     fname = f"{uuid.uuid4().hex}{ext}"
     orig_rel = f"orig/{fname}"
@@ -453,11 +429,11 @@ async def _save_cloud_photo(user: dict, album_id: int, f: UploadFile) -> dict:
             (sharing.CLOUD_THUMBS / fname).write_bytes(raw[:0])  # 占位
 
     rec = sharing.add_cloud_photo(
-        user, album_id, file_hash, filename=fname, orig_name=f.filename,
+        user, album_id, filename=fname, orig_name=f.filename,
         size_bytes=len(raw), width=width, height=height, shot_at=shot_at,
         media_type=media_type, exif_json=_json.dumps(exif, ensure_ascii=False),
         thumb_path=thumb_rel, orig_path=orig_rel)
-    return {"ok": True, "id": rec["id"], "name": f.filename, "duplicate": False}
+    return {"ok": True, "id": rec["id"], "name": f.filename}
 
 
 @app.get("/api/photos/{photo_id}")

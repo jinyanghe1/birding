@@ -10,8 +10,7 @@ LOCAL_DIR="/Users/hejinyang/WorkBuddy/观鸟skill"
 
 echo "=== 打包代码 ==="
 cd "$LOCAL_DIR"
-tar czf /tmp/birding.tar.gz --exclude='data' --exclude='models' --exclude='.git' \
-  --exclude='__pycache__' --exclude='*.pyc' --exclude='logs' birdscan/
+tar czf /tmp/birding.tar.gz --exclude='__pycache__' --exclude='*.pyc' birdscan/
 
 echo "=== 上传代码 ==="
 scp -i "$KEY" /tmp/birding.tar.gz "$SERVER:~/"
@@ -20,6 +19,8 @@ echo "=== 解压并重启 ==="
 ssh -i "$KEY" "$SERVER" << 'REMOTE'
 cd ~/birding
 tar xzf ~/birding.tar.gz
+# 静态文件也要部署（PWA manifest/sw.js）
+cp -r birdscan/static/* /var/www/html/ 2>/dev/null || true
 sudo systemctl restart birding
 sleep 2
 sudo systemctl status birding --no-pager | head -5

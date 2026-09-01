@@ -386,7 +386,7 @@ def api_create_album(request: Request, body: dict):
 @app.get("/api/albums/{album_id}/photos")
 def api_album_photos(album_id: int, request: Request,
                      limit: int = 200, offset: int = 0):
-    rows = sharing.list_cloud_photos(album_id, _current_user(request), limit, offset)
+    rows = sharing.list_album_photos(album_id, _current_user(request), limit, offset)
     if rows is None:
         raise HTTPException(status_code=404, detail="相册不存在或无权限")
     return rows
@@ -494,7 +494,7 @@ def api_download_album(album_id: int, request: Request):
     """整本相册打包 zip（流式）。"""
     import zipfile, tempfile
     user = _current_user(request)
-    rows = sharing.list_cloud_photos(album_id, user, limit=10000)
+    rows = sharing.list_album_photos(album_id, user, limit=10000)
     if rows is None:
         raise HTTPException(status_code=404, detail="相册不存在或无权限")
     tmp = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)

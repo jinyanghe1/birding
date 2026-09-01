@@ -944,7 +944,7 @@ async function loadMap(){
   if(!MAP) return;
   const token = ++MAP_LOAD_TOKEN;
   const z = Math.max(2, Math.min(9, MAP.getZoom()));
-  const url = `${API(`map-z${z}`)}`;
+  const url = `/api/map?zoom=${z}&min_conf=${mc()}`;
   const pts = await fetch(url).then(r=>r.json()).catch(()=>[]);
   if(token !== MAP_LOAD_TOKEN) return;   // 过期响应丢弃
   MAP_LAYER.clearLayers();

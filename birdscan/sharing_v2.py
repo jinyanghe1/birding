@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 import json
 import secrets
 from pathlib import Path
@@ -73,6 +74,26 @@ def init_sharing():
     CLOUD_THUMBS.mkdir(parents=True, exist_ok=True)
     CLOUD_ORIG.mkdir(parents=True, exist_ok=True)
     with conn_ctx() as con:
+        # 迁移：albums 加 is_default 列
+        try:
+            con.execute("SELECT is_default FROM albums LIMIT 1")
+        except sqlite3.OperationalError:
+            con.execute("ALTER TABLE albums ADD COLUMN is_default BOOLEAN DEFAULT 0")
+        
+        # 迁移：cloud_photos 加 file_hash 列
+        try:
+            con.execute("SELECT file_hash FROM cloud_photos LIMIT 1")
+        except sqlite3.OperationalError:
+            con.execute("ALTER TABLE cloud_photos ADD COLUMN file_hash TEXT")
+            # 给已有数据生成哈希
+            import hashlib
+            rows = con.execute("SELECT id, filename FROM cloud_photos").fetchall()
+            for r in rows:
+                fp = CLOUD_ORIG / r["filename"]
+                if fp.exists():
+                    h = hashlib.sha256(fp.read_bytes()).hexdigest()
+                    con.execute("UPDATE cloud_photos SET file_hash=? WHERE id=?",
+                               (h, r["id"]))
         con.executescript(DDL)
         # 确保默认相册（物种墙）
         row = con.execute(

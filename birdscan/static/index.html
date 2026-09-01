@@ -156,6 +156,55 @@ input{flex:1;max-width:280px}
 #addModal .act button:disabled{opacity:.5;cursor:not-allowed}
 #addResult{margin-top:14px;font-size:13px;line-height:1.6;display:none}
 #addResult.ok{color:var(--teal)} #addResult.err{color:var(--red)}
+
+/* ========== 手机端适配（Instagram 风格） ========== */
+@media (max-width: 768px) {
+  .wrap{padding:12px 12px 80px}
+  
+  /* 顶部导航 */
+  header{margin-bottom:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+  h1{font-size:18px;font-weight:700}
+  
+  /* Tab 横向滚动 */
+  .tabs{overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;margin-bottom:12px}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{padding:12px 16px;font-size:15px;flex-shrink:0}
+  
+  /* 统计卡片 */
+  .stats{grid-template-columns:repeat(2,1fr);gap:8px}
+  .stat{padding:12px}
+  .stat .n{font-size:20px}
+  
+  /* 物种墙：大图片网格 */
+  .grid{grid-template-columns:repeat(3,1fr)!important;gap:2px!important}
+  .grid .card{border-radius:0!important;border:0!important}
+  .grid .card img{border-radius:0!important}
+  
+  /* 相册：单列 */
+  .reviewItem{flex-direction:column;align-items:flex-start}
+  .reviewItem img{width:100%!important;height:auto!important;aspect-ratio:1}
+  
+  /* 按钮加大 */
+  button{padding:14px 20px!important;font-size:15px!important;border-radius:12px!important}
+  input,select{padding:14px!important;font-size:15px!important;border-radius:12px!important}
+  
+  /* 底部导航栏（Instagram 风格） */
+  .wrap::after{content:'';display:block;height:60px}
+  .bottomNav{position:fixed;bottom:0;left:0;right:0;background:var(--panel);
+    border-top:1px solid var(--line);display:flex;justify-content:space-around;
+    padding:8px 0;z-index:100;box-shadow:0 -2px 8px rgba(0,0,0,.08)}
+  .bottomNav a{display:flex;flex-direction:column;align-items:center;gap:4px;
+    color:var(--tx2);font-size:11px;text-decoration:none;padding:4px 12px}
+  .bottomNav a.on{color:var(--teal)}
+  .bottomNav .icon{font-size:24px}
+}
+
+/* 平板 */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .wrap{max-width:100%;padding:16px}
+  .grid{grid-template-columns:repeat(4,1fr)!important}
+}
 </style>
 </head>
 <body>
@@ -1136,6 +1185,46 @@ if(inviteMatch){
       }
     });
   }
+}
+</script>
+
+<!-- 手机端底部导航（Instagram 风格） -->
+<nav class="bottomNav" style="display:none" id="bottomNav">
+  <a href="#" data-tab="wall" class="on">
+    <span class="icon">🏠</span>
+    <span>首页</span>
+  </a>
+  <a href="#" data-tab="map">
+    <span class="icon">🗺️</span>
+    <span>地图</span>
+  </a>
+  <a href="#" data-tab="albums">
+    <span class="icon">📷</span>
+    <span>相册</span>
+  </a>
+  <a href="#" data-tab="review">
+    <span class="icon">✓</span>
+    <span>复核</span>
+  </a>
+</nav>
+
+<script>
+// 手机端检测 + 底部导航
+if(window.innerWidth <= 768){
+  $('#bottomNav').style.display = 'flex';
+  
+  // 底部导航点击
+  $$('.bottomNav a').forEach(a=>{
+    a.onclick = (e)=>{
+      e.preventDefault();
+      $$('.bottomNav a').forEach(x=>x.classList.remove('on'));
+      a.classList.add('on');
+      const tab = a.dataset.tab;
+      // 触发对应的 tab 切换
+      const tabEl = document.querySelector(`[data-t="${tab}"]`);
+      if(tabEl) tabEl.click();
+    };
+  });
 }
 </script>
 </body>

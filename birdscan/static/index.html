@@ -923,7 +923,7 @@ async function initMap(){
   });
   
   // 尝试加载 OSM，失败则 fallback 到百度
-  osmLayer.on('tileerror', ()=>{
+  osmLayer.on('tileerror', async ()=>{
     console.warn('OSM 瓦片加载失败，切换到百度地图');
     MAP.removeLayer(osmLayer);
     const ak = await fetch('/api/config/baidu-map-ak').then(r=>r.json()).then(j=>j.ak||'').catch(()=>'');

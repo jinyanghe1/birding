@@ -914,12 +914,26 @@ async function initMap(){
   if(MAP){ MAP.invalidateSize(); return; }
   // Leaflet 在 display:none 的容器里初始化会失效，所以必须先显示再初始化
   MAP = L.map('mapContainer', {zoomControl:true, attributionControl:true, worldCopyJump:true});
-  // 百度地图瓦片（带 AK，从后端读）
-  const ak = await fetch('/api/config/baidu-map-ak').then(r=>r.json()).then(j=>j.ak||'').catch(()=>'');
-  L.tileLayer('https://maponline{s}.bdimg.com/tile/?qt=tile&x={x}&y={y}&z={z}&styles=pl&scaler=1&udt=20191119&ak=' + ak, {
-    attribution:'&copy; 百度地图',
-    maxZoom:18, subdomains:['0','1','2','3']
-  }).addTo(MAP);
+  
+  // 地图瓦片：优先 OSM（免 key），失败 fallback 到百度
+  const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution:'&copy; OpenStreetMap contributors',
+    maxZoom: 19,
+    subdomains: ['a','b','c']
+  });
+  
+  // 尝试加载 OSM，失败则 fallback 到百度
+  osmLayer.on('tileerror', ()=>{
+    console.warn('OSM 瓦片加载失败，切换到百度地图');
+    MAP.removeLayer(osmLayer);
+    const ak = await fetch('/api/config/baidu-map-ak').then(r=>r.json()).then(j=>j.ak||'').catch(()=>'');
+    L.tileLayer('https://maponline{s}.bdimg.com/tile/?qt=tile&x={x}&y={y}&z={z}&styles=pl&scaler=1&udt=20191119&ak=' + ak, {
+      attribution:'&copy; 百度地图',
+      maxZoom:18, subdomains:['0','1','2','3']
+    }).addTo(MAP);
+  });
+  
+  osmLayer.addTo(MAP);
   MAP_LAYER = L.layerGroup().addTo(MAP);
   MAP.on('zoomend moveend', loadMap);
   MAP.setView([34, 108], 4);

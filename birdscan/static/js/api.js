@@ -72,13 +72,26 @@
   function renderUserBadge() {
     const el = $('#userBadge');
     if (!el) return;
-    if (!currentUser) { el.style.display = 'none'; return; }
-    el.style.display = 'inline-flex';
-    el.innerHTML = `<span class="avatar">${esc((currentUser.display_name || 'U')[0])}</span>
-      <span>${esc(currentUser.display_name || currentUser.username)}</span>
-      <span class="role">${currentUser.role === 'owner' ? '所有者' : '成员'}</span>
-      <button onclick="B.logout()">退出</button>`;
+    if (!currentUser) { el.style.display = 'none'; }
+    else {
+      el.style.display = 'inline-flex';
+      el.innerHTML = `<span class="avatar">${esc((currentUser.display_name || 'U')[0])}</span>
+        <span>${esc(currentUser.display_name || currentUser.username)}</span>
+        <span class="role">${currentUser.role === 'owner' ? '所有者' : '成员'}</span>
+        <button onclick="B.logout()">退出</button>`;
+    }
+    renderScopeChip();
   }
+
+  // 数据范围 chip（路线 C per-user）：匿名=所有者公开数据 / 成员=我的 / owner=全部
+  function renderScopeChip() {
+    const el = $('#scopeChip');
+    if (!el) return;
+    el.textContent = !currentUser ? '数据范围：所有者公开数据'
+      : currentUser.role === 'owner' ? '数据范围：全部数据'
+      : '数据范围：我的数据';
+  }
+  B.renderScopeChip = renderScopeChip;
 
   async function logout() {
     try { await fetch(API('auth/logout'), { method: 'POST' }); } catch (e) {}
@@ -131,7 +144,9 @@
       setApiKey(j.api_key);
       await ensureSession();
       listeners.forEach((f) => f(currentUser));
-      B.toast(`注册成功，欢迎 ${j.display_name}！`);
+      B.toast(j.group_name
+        ? `注册成功，欢迎 ${j.display_name}！已加入「${j.group_name}」`
+        : `注册成功，欢迎 ${j.display_name}！`);
       history.replaceState({}, '', location.pathname);
       $('#regBanner').style.display = 'none';
     } catch (e) { B.toast('注册失败：' + e.message, true); }

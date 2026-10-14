@@ -453,6 +453,8 @@ def api_logout():
 
 @app.on_event("startup")
 def _init_sharing():
+    # 核心 schema（含 observations.owner_id 等迁移）+ 共享相册 schema
+    store.init_db()
     sharing.init_sharing()
 
 

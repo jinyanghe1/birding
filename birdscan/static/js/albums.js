@@ -95,30 +95,30 @@
     } catch (e) { B.toast('创建失败：' + e.message, true); }
   }
 
-  // ---------------- 邀请家人 ----------------
+  // ---------------- 邀请家人（绑定家庭组） ----------------
   async function showInviteModal() {
     if (!isOwner()) { B.toast('只有所有者能生成邀请码', true); return; }
-    if (!ALBUMS.length) {
-      ALBUMS = await apiJSON('albums').catch(() => []);
-      if (!ALBUMS.length) { B.toast('还没有可邀请的相册', true); return; }
-    }
+    const groups = await apiJSON('groups').catch(() => []);
+    if (!groups.length) { B.toast('还没有家庭组', true); return; }
     $('#inviteAlbums').innerHTML =
-      '<div class="tiny" style="color:var(--tx3);margin-bottom:8px">家人注册后只能看到你勾选的相册</div>' +
-      ALBUMS.map((a) => `<label>
-        <input type="checkbox" value="${a.id}" checked>
-        <span>${esc(a.name)}</span>
-        ${a.is_default ? '<span class="tiny" style="color:var(--tx3)">（默认相册）</span>' : ''}
+      '<div class="tiny" style="color:var(--tx3);margin-bottom:8px">'
+      + '家人接受邀请后加入该组，可见组内全部相册（含之后新建）</div>'
+      + groups.map((g, i) => `<label>
+        <input type="radio" name="invGroup" value="${g.id}" ${i === 0 ? 'checked' : ''}>
+        <span>${esc(g.name)}</span>
+        <span class="tiny" style="color:var(--tx3)">（${g.member_count} 人）</span>
       </label>`).join('');
     $('#inviteResult').style.display = 'none';
     B.openDialog('#inviteModal');
   }
 
   async function generateInvite() {
-    const checked = B.$$('#inviteAlbums input:checked').map((i) => parseInt(i.value, 10));
-    if (!checked.length) { B.toast('请至少勾选一个相册', true); return; }
+    const checked = document.querySelector('input[name="invGroup"]:checked');
+    if (!checked) { B.toast('请选择一个家庭组', true); return; }
+    const gid = parseInt(checked.value, 10);
     try {
       const r = await api('invites', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ album_ids: checked, max_uses: 1 }) });
+        body: JSON.stringify({ group_id: gid, max_uses: 1 }) });
       const j = await r.json();
       if (!r.ok) { B.toast('生成失败：' + (j.detail || '未知错误'), true); return; }
       $('#inviteLink').textContent = `${location.origin}/?invite=${j.code}`;

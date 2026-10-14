@@ -26,7 +26,11 @@
     ALL = list;
     const g = $('#grid');
     if (!list.length) {
-      g.innerHTML = '<div class="empty">还没有观测记录。<br>去「扫描与识别」标签页跑一次扫描。</div>';
+      const member = (B.currentUser() || {}).role === 'member';
+      g.innerHTML = member
+        ? '<div class="empty">你还没有观测记录。<br>点右上角「＋ 加新」上传第一张照片，'
+          + '或等家庭成员把照片共享到相册。</div>'
+        : '<div class="empty">还没有观测记录。<br>去「扫描与识别」标签页跑一次扫描。</div>';
       return;
     }
     g.innerHTML = list.map((s) => {

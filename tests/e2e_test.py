@@ -149,14 +149,16 @@ async def case_invite_flow():
         await page.click("button:has-text('邀请家人')")
         await page.wait_for_timeout(800)
         assert await page.locator("#inviteModal").is_visible(), "邀请弹窗未显示"
+        # 组邀请：展示家庭组单选（不再是相册勾选）
         albums_html = await page.locator("#inviteAlbums").inner_html()
-        assert "物种墙" in albums_html, "邀请弹窗缺少物种墙选项"
+        assert "我的家庭" in albums_html, f"邀请弹窗缺少家庭组选项: {albums_html}"
+        assert await page.locator("input[name='invGroup']").count() >= 1, "缺少组单选钮"
         await page.click("#btnGenerateInvite")
         await page.wait_for_selector("#inviteResult", state="visible", timeout=20000)
         link = await page.locator("#inviteLink").text_content()
         assert "invite=" in link, f"邀请链接异常: {link}"
         code = link.split("invite=")[1].strip()
-        print(f"✅ 邀请码生成成功（{code[:6]}…）")
+        print(f"✅ 组邀请码生成成功（{code[:6]}…）")
 
         # 用邀请码注册（API）
         req = urllib.request.Request(

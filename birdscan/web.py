@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
 from datetime import datetime
@@ -9,10 +10,14 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 
 from . import auth, config, store
 
-app = FastAPI(title="观鸟数据库", version="0.1.0")
+log = logging.getLogger("birdscan.web")
+
+app = FastAPI(title="观鸟数据库", version="0.2.0")
 
 STATIC = Path(__file__).parent / "static"
 
@@ -61,6 +66,12 @@ def service_worker():
     if f.exists():
         return FileResponse(f, media_type="application/javascript")
     raise HTTPException(status_code=404)
+
+
+# 静态资源（前端模块化后的 css/js）
+app.mount("/static", StaticFiles(directory=STATIC), name="static")
+# 缩略图直出（本地开发无 Nginx 时也能显示；服务器上 Nginx 优先）
+app.mount("/thumbs", StaticFiles(directory=config.THUMB_DIR), name="thumbs")
 
 
 @app.get("/img")
@@ -170,14 +181,17 @@ def api_map_cell(lat: float, lon: float, zoom: int = 12,
 
 
 @app.post("/api/scan")
-def api_scan(limit: int = 0, force: bool = False):
-    """手动触发扫描。同步执行，大库可能较慢。"""
+def api_scan(limit: int = 0, force: bool = False,
+             _: None = Depends(auth.verify_api_key)):
+    """手动触发扫描。同步执行，大库可能较慢。需鉴权（P0-4 修复）。"""
     from . import pipeline
     try:
         stats = pipeline.scan(limit=limit or None, force=force)
         return {"ok": True, "stats": stats}
-    except Exception as e:
-        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+    except Exception:
+        log.exception("扫描失败")
+        return JSONResponse(
+            {"ok": False, "error": "扫描失败，请查看服务器日志"}, status_code=500)
 
 
 @app.get("/api/queue")
@@ -320,14 +334,52 @@ async def api_upload(
 # ------------------------------------------------------------------ 家庭共享相册
 from . import sharing_v2 as sharing
 
+# 相册上传安全限制（P1-8 大小 / P1-11 类型白名单）
+ALBUM_ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic",
+                      ".mp4", ".mov", ".m4v", ".avi"}
+ALBUM_MAX_BYTES = 50 * 1024 * 1024          # 50MB（/api/upload 为 200MB）
+# 下载侧安全媒体类型（白名单外一律 application/octet-stream，防存储型 XSS）
+_SAFE_MEDIA = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+    ".webp": "image/webp", ".heic": "image/heic", ".heif": "image/heic",
+    ".mp4": "video/mp4", ".mov": "video/quicktime", ".m4v": "video/mp4",
+    ".avi": "video/x-msvideo",
+}
+_NOSNIFF = {"X-Content-Type-Options": "nosniff"}
+
 
 def _current_user(request: Request) -> dict:
-    """从 X-API-Key 头解析当前用户（含 owner 的现有 key）。"""
-    key = request.headers.get("X-API-Key", "")
+    """从 X-API-Key 头或 Cookie 解析当前用户。
+
+    Cookie 用于 <img src>/window.open 等无法带自定义 header 的场景。
+    """
+    key = auth.key_from_request(request)
     user = sharing.get_user_by_key(key)
     if not user:
         raise HTTPException(status_code=401, detail="未授权")
     return user
+
+
+@app.post("/api/auth/session")
+def api_set_session(request: Request):
+    """用 API Key 换登录态 Cookie（30 天，HttpOnly + SameSite=Lax）。"""
+    key = auth.key_from_request(request)
+    user = sharing.get_user_by_key(key)
+    if not user:
+        raise HTTPException(status_code=401, detail="API Key 无效")
+    resp = JSONResponse({"ok": True,
+                         "user": {k: user[k] for k in
+                                  ("id", "username", "display_name", "role")}})
+    resp.set_cookie(auth.COOKIE_NAME, key, max_age=30 * 24 * 3600,
+                    httponly=True, samesite="lax", path="/")
+    return resp
+
+
+@app.post("/api/auth/logout")
+def api_logout():
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(auth.COOKIE_NAME, path="/")
+    return resp
 
 
 @app.on_event("startup")
@@ -345,7 +397,7 @@ def api_login(body: dict):
 
 @app.post("/api/invites")
 def api_create_invite(request: Request, body: dict):
-    key = request.headers.get("X-API-Key", "")
+    key = auth.key_from_request(request)
     inv = sharing.create_invite(key, body.get("album_ids", []), body.get("max_uses", 1))
     if not inv:
         raise HTTPException(status_code=403, detail="只有 owner 能生成邀请码")
@@ -379,8 +431,11 @@ def api_list_albums(request: Request):
 
 @app.post("/api/albums")
 def api_create_album(request: Request, body: dict):
-    return sharing.create_album(_current_user(request),
-                                body.get("name", ""), body.get("description", ""))
+    try:
+        return sharing.create_album(_current_user(request),
+                                    body.get("name", ""), body.get("description", ""))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/api/albums/{album_id}/photos")
@@ -411,33 +466,58 @@ async def _save_cloud_photo(user: dict, album_id: int, f: UploadFile) -> dict:
     """保存上传：原图 + 缩略图 + EXIF + 哈希去重。"""
     import uuid
     import hashlib
+    import io
+    import json as _json
     from PIL import Image
     from PIL.ExifTags import TAGS
-    import io, json as _json
+
+    # 类型白名单（P1-11：防 .html/.svg 存储型 XSS）
+    ext = Path(f.filename or "").suffix.lower()
+    if ext not in ALBUM_ALLOWED_EXTS:
+        raise HTTPException(400, f"不支持的格式 {ext or '(无扩展名)'}")
 
     raw = await f.read()
+    # 大小限制（P1-8：防内存耗尽 DoS）
+    if len(raw) > ALBUM_MAX_BYTES:
+        raise HTTPException(
+            413, f"文件过大（>{ALBUM_MAX_BYTES // 1024 // 1024}MB）")
+
     # 计算 SHA256 用于去重
     file_hash = hashlib.sha256(raw).hexdigest()
-    
+
     # 检查是否已存在
     existing = sharing.get_photo_by_hash(file_hash)
     if existing:
         # 已存在：只加关联，不重复存储
         sharing.add_photo_to_album(existing["id"], album_id, user)
         return {"ok": True, "id": existing["id"], "name": f.filename, "duplicate": True}
-    
+
     # 不存在：存原图 + 缩略图
-    ext = Path(f.filename or "x.jpg").suffix.lower() or ".jpg"
     fname = f"{uuid.uuid4().hex}{ext}"
     orig_rel = f"orig/{fname}"
     thumb_rel = f"thumbs/{fname}"
-    (sharing.CLOUD_ORIG / fname).write_bytes(raw)
+    orig_fp = sharing.CLOUD_ORIG / fname
+    thumb_fp = sharing.CLOUD_THUMBS / fname
+    orig_fp.write_bytes(raw)
 
     width = height = None
     shot_at = None
     exif = {}
-    media_type = "video" if ext in (".mp4", ".mov") else "image"
-    if media_type == "image":
+    is_video = ext in (".mp4", ".mov", ".m4v", ".avi")
+    media_type = "video" if is_video else "image"
+    if is_video:
+        # 视频抽第一帧做缩略图；失败则占位图
+        try:
+            import subprocess
+            subprocess.run(
+                ["ffmpeg", "-y", "-loglevel", "error", "-i", str(orig_fp),
+                 "-frames:v", "1", "-q:v", "3", str(thumb_fp)],
+                capture_output=True, timeout=60)
+        except Exception:
+            pass
+        if not thumb_fp.exists() or thumb_fp.stat().st_size == 0:
+            _placeholder_thumb(thumb_fp)
+    else:
         try:
             im = Image.open(io.BytesIO(raw))
             width, height = im.size
@@ -448,16 +528,38 @@ async def _save_cloud_photo(user: dict, album_id: int, f: UploadFile) -> dict:
                 shot_at = dt.replace(":", "-", 2)
             # 缩略图 512px
             im.thumbnail((512, 512))
-            im.convert("RGB").save(sharing.CLOUD_THUMBS / fname, "JPEG", quality=82)
+            im.convert("RGB").save(thumb_fp, "JPEG", quality=82)
         except Exception:
-            (sharing.CLOUD_THUMBS / fname).write_bytes(raw[:0])  # 占位
+            _placeholder_thumb(thumb_fp)
 
-    rec = sharing.add_cloud_photo(
-        user, album_id, file_hash, filename=fname, orig_name=f.filename,
-        size_bytes=len(raw), width=width, height=height, shot_at=shot_at,
-        media_type=media_type, exif_json=_json.dumps(exif, ensure_ascii=False),
-        thumb_path=thumb_rel, orig_path=orig_rel)
+    try:
+        rec = sharing.add_cloud_photo(
+            user, album_id, file_hash, filename=fname, orig_name=f.filename,
+            size_bytes=len(raw), width=width, height=height, shot_at=shot_at,
+            media_type=media_type, exif_json=_json.dumps(exif, ensure_ascii=False),
+            thumb_path=thumb_rel, orig_path=orig_rel)
+    except Exception:
+        # DB 失败：清理已落盘文件，避免孤儿（P1-9）
+        for fp in (orig_fp, thumb_fp):
+            try:
+                if fp.exists():
+                    fp.unlink()
+            except OSError:
+                pass
+        raise
     return {"ok": True, "id": rec["id"], "name": f.filename, "duplicate": False}
+
+
+def _placeholder_thumb(fp: Path) -> None:
+    """生成占位缩略图（视频无帧/图片解析失败时）。"""
+    try:
+        from PIL import Image, ImageDraw
+        im = Image.new("RGB", (320, 240), (220, 220, 224))
+        d = ImageDraw.Draw(im)
+        d.text((12, 12), "VIDEO", fill=(120, 120, 128))
+        im.save(fp, "JPEG", quality=70)
+    except Exception:
+        fp.write_bytes(b"")
 
 
 @app.get("/api/photos/{photo_id}")
@@ -468,7 +570,9 @@ def api_cloud_photo(photo_id: int, request: Request):
     fp = sharing.CLOUD_DIR / p["orig_path"]
     if not fp.exists():
         raise HTTPException(status_code=404, detail="文件缺失")
-    return FileResponse(fp)
+    media = _SAFE_MEDIA.get(Path(p["orig_path"]).suffix.lower(),
+                            "application/octet-stream")
+    return FileResponse(fp, media_type=media, headers=_NOSNIFF)
 
 
 @app.get("/api/photos/{photo_id}/thumb")
@@ -479,7 +583,11 @@ def api_cloud_photo_thumb(photo_id: int, request: Request):
     fp = sharing.CLOUD_DIR / p["thumb_path"]
     if not fp.exists() or fp.stat().st_size == 0:
         fp = sharing.CLOUD_DIR / p["orig_path"]
-    return FileResponse(fp)
+    media = _SAFE_MEDIA.get(Path(p["orig_path"]).suffix.lower(),
+                            "application/octet-stream")
+    if fp.suffix.lower() not in _SAFE_MEDIA:
+        media = "image/jpeg"  # 缩略图恒为 JPEG（含视频抽帧）
+    return FileResponse(fp, media_type=media, headers=_NOSNIFF)
 
 
 @app.delete("/api/photos/{photo_id}")
@@ -503,27 +611,29 @@ def api_download_album(album_id: int, request: Request):
             fp = sharing.CLOUD_DIR / p["orig_path"]
             if fp.exists():
                 z.write(fp, arcname=p["orig_name"] or p["filename"])
-    return FileResponse(tmp.name, filename=f"album-{album_id}.zip")
+    tmp.close()
+    return FileResponse(
+        tmp.name, filename=f"album-{album_id}.zip",
+        background=BackgroundTask(_safe_unlink, tmp.name))
+
+
+def _safe_unlink(path: str) -> None:
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
 
 
 @app.delete("/api/albums/{album_id}")
 def api_delete_album(album_id: int, request: Request):
-    """删除相册（需鉴权，owner 或相册创建者）。"""
+    """删除相册（需鉴权，owner 或相册创建者；级联 GC 无引用照片）。"""
     user = _current_user(request)
-    album = sharing.get_album(album_id, user)
-    if not album:
-        raise HTTPException(status_code=404, detail="相册不存在或无权限")
-    
-    # 只有 owner 或相册创建者能删除
-    if user["role"] != "owner" and album["owner_id"] != user["id"]:
+    r = sharing.delete_album(album_id, user)
+    if not r:
+        if not sharing.get_album(album_id, user):
+            raise HTTPException(status_code=404, detail="相册不存在或无权限")
         raise HTTPException(status_code=403, detail="只有相册创建者能删除")
-    
-    # 删除相册里的照片关联
-    with store.conn_ctx() as con:
-        con.execute("DELETE FROM album_photos WHERE album_id=?", (album_id,))
-        con.execute("DELETE FROM albums WHERE id=?", (album_id,))
-    
-    return {"ok": True, "deleted_album": album["name"]}
+    return r
 
 
 @app.post("/api/sync/pull")
@@ -536,8 +646,20 @@ def api_sync_pull(request: Request, body: dict):
 
 @app.post("/api/sync/push")
 def api_sync_push(request: Request, body: dict):
-    """标记照片同步状态。"""
-    _current_user(request)
-    for pid, status in body.get("marks", {}).items():
-        sharing.sync_mark(int(pid), status)
-    return {"ok": True}
+    """标记照片同步状态（仅上传者本人或 owner）。"""
+    user = _current_user(request)
+    marks = body.get("marks", {})
+    if not isinstance(marks, dict):
+        raise HTTPException(status_code=400, detail="marks 必须是对象")
+    ok, failed = 0, []
+    for pid, status in marks.items():
+        try:
+            pid_i = int(pid)
+        except (TypeError, ValueError):
+            failed.append(pid)
+            continue
+        if sharing.sync_mark(pid_i, status, user):
+            ok += 1
+        else:
+            failed.append(pid)
+    return {"ok": True, "marked": ok, "failed": failed}

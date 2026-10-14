@@ -83,15 +83,15 @@ async def case_album_flow():
         await page.wait_for_selector("#userBadge", state="visible", timeout=8000)
         assert await page.locator("#userBadge").is_visible(), "登录后用户徽标未显示"
 
-        # 建相册
+        # 建相册（生产服务器较慢，等 tab 出现而非固定睡眠）
         await page.click('.tab[data-t="albums"]')
         await page.wait_for_timeout(1500)
         album_name = f"E2E{os.getpid()}"
         await page.fill("#newAlbumName", album_name)
         await page.click("#btnCreateAlbum")
-        await page.wait_for_timeout(2000)
-        tabs = await page.locator("#albumTabs .tab").all_inner_texts()
-        assert album_name in tabs, f"相册创建失败，tabs: {tabs}"
+        await page.wait_for_selector(
+            f"#albumTabs .tab:has-text('{album_name}')", timeout=20000)
+        print(f"✅ 相册创建成功（{album_name}）")
 
         # 选中该相册并上传
         await page.click(f"#albumTabs .tab:has-text('{album_name}')")
@@ -100,11 +100,12 @@ async def case_album_flow():
             "name": "e2e.jpg", "mimeType": "image/jpeg",
             "buffer": _make_jpeg()})
         await page.click("#btnAlbumUpload")
-        await page.wait_for_selector(".albumTile img", timeout=15000)
-        # 关键：<img> 无 header，必须靠 Cookie 鉴权加载成功
-        ok = await page.locator(".albumTile img").first.evaluate(
-            "el => el.complete && el.naturalWidth > 0")
-        assert ok, "相册缩略图加载失败（Cookie 鉴权未生效？）"
+        await page.wait_for_selector(".albumTile img", timeout=20000)
+        # 关键：<img> 无 header，必须靠 Cookie 鉴权加载成功（轮询等图片加载完）
+        await page.wait_for_function(
+            "() => { const i = document.querySelector('.albumTile img');"
+            " return i && i.complete && i.naturalWidth > 0; }",
+            timeout=25000)
         print("✅ 相册缩略图加载成功（Cookie 鉴权生效）")
 
         # 删除相册（confirm + prompt 输入相册名）
@@ -117,9 +118,8 @@ async def case_album_flow():
                 await d.accept()
         page.on("dialog", _dialog_handler)
         await page.click("#btnAlbumDelete")
-        await page.wait_for_timeout(2500)
-        tabs = await page.locator("#albumTabs .tab").all_inner_texts()
-        assert album_name not in tabs, f"相册删除失败，tabs: {tabs}"
+        await page.wait_for_selector(
+            f"#albumTabs .tab:has-text('{album_name}')", state="detached", timeout=20000)
 
         js_errors = [e for e in errors if "favicon" not in e]
         assert not js_errors, f"控制台错误: {js_errors}"
@@ -145,14 +145,14 @@ async def case_invite_flow():
         await page.wait_for_selector("#userBadge", state="visible", timeout=8000)
 
         await page.click('.tab[data-t="albums"]')
-        await page.wait_for_timeout(1500)
+        await page.wait_for_selector("#albumTabs .tab:has-text('物种墙')", timeout=20000)
         await page.click("button:has-text('邀请家人')")
         await page.wait_for_timeout(800)
         assert await page.locator("#inviteModal").is_visible(), "邀请弹窗未显示"
         albums_html = await page.locator("#inviteAlbums").inner_html()
         assert "物种墙" in albums_html, "邀请弹窗缺少物种墙选项"
         await page.click("#btnGenerateInvite")
-        await page.wait_for_timeout(1200)
+        await page.wait_for_selector("#inviteResult", state="visible", timeout=20000)
         link = await page.locator("#inviteLink").text_content()
         assert "invite=" in link, f"邀请链接异常: {link}"
         code = link.split("invite=")[1].strip()

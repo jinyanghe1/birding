@@ -37,7 +37,16 @@
     return r;
   }
   B.api = api;
-  const apiJSON = async (path, opts) => (await api(path, opts)).json();
+  // JSON 请求：非 2xx 抛错（让调用方的 .catch 兜底生效，而不是把 {detail} 当数据）
+  const apiJSON = async (path, opts) => {
+    const r = await api(path, opts);
+    if (!r.ok) {
+      let detail = "";
+      try { detail = (await r.json()).detail || ""; } catch (e) { /* 非 JSON */ }
+      throw new Error(`${r.status} ${detail}`.trim() || `HTTP ${r.status}`);
+    }
+    return r.json();
+  };
   B.apiJSON = apiJSON;
 
   // 当前用户（登录态）

@@ -57,6 +57,7 @@
 
   function renderPhotos(photos) {
     const box = $('#albumList');
+    if (!Array.isArray(photos)) photos = [];
     if (!photos.length) {
       box.innerHTML = '<div class="empty">还没有照片。选一个相册，点「上传照片」添加。</div>';
       return;
@@ -95,8 +96,12 @@
   }
 
   // ---------------- 邀请家人 ----------------
-  function showInviteModal() {
+  async function showInviteModal() {
     if (!isOwner()) { B.toast('只有所有者能生成邀请码', true); return; }
+    if (!ALBUMS.length) {
+      ALBUMS = await apiJSON('albums').catch(() => []);
+      if (!ALBUMS.length) { B.toast('还没有可邀请的相册', true); return; }
+    }
     $('#inviteAlbums').innerHTML =
       '<div class="tiny" style="color:var(--tx3);margin-bottom:8px">家人注册后只能看到你勾选的相册</div>' +
       ALBUMS.map((a) => `<label>

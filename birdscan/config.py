@@ -18,7 +18,9 @@ for _d in (DB_PATH.parent, THUMB_DIR, FRAME_DIR, MODEL_DIR, LOG_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------- L0 读取层
-LIBRARY_PATH = None                 # None = 使用系统默认照片库
+# None = 使用系统默认照片库。沙箱/launchd 下 osxphotos 自动查找会读
+# com.apple.Photos.plist 触发 TCC 拒绝，此时用 BIRDSCAN_LIBRARY_PATH 显式指定。
+LIBRARY_PATH = os.environ.get("BIRDSCAN_LIBRARY_PATH") or None
 # 实测会有 1,831 张无 GPS 的 PNG 命中"疑似截图"规则，但其中可能混有导出的真实鸟照。
 # 多检测它们只多花约 80 秒，误杀却不可恢复（要全量重扫）。L0 优先保召回，交给 L1 去筛。
 SKIP_PNG_SCREENSHOT = False

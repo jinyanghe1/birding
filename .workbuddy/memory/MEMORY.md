@@ -92,19 +92,27 @@
 
 **API Key 已轮换**（旧 key 曾泄露于公开仓库 tests/e2e_test.py:76,105）：
 - 新 key 在本地 `data/.api_key`（勿写入任何进 git 的文件）；服务器 key 在 systemd **drop-in** `/etc/systemd/system/birding.service.d/override.conf`（不在主单元文件，改 key 要改这里）；DB users owner 行两边已同步。
-- 遗留：e2e 测试仍写死旧 key（已失效），下一步改读环境变量。
+- e2e 测试已改读 `BIRDING_TEST_KEY` 环境变量（P0-1 闭环）。
 
 **服务器真实状态（SSH 必须带 `-i ~/Downloads/birding.pem`，沙箱不带 key 连不上）**：
-- 服务器代码 = 2026-09-01 部署（origin/main 时代），**不含**本地领先的 3 个 commit（相册删除/亮色主题/手机适配）和 config.py 的 BIRDSCAN_LIBRARY_PATH 改动。
-- **相册已有真实使用：4 用户（owner + 成员「妈妈」+ 2 个 pending 占位行）、4 相册、1 邀请码；cloud_photos=0**（上传从未成功）。
+- ~~服务器代码 = 2026-09-01 部署~~ **✅ 2026-10-14 晚已全量更新**（10 个 commit，P0/P1 修复 + 前端重写），生产 E2E 7/7 通过。
+- **相册已有真实使用：4 用户（owner + 成员「妈妈」+ 2 个 pending 占位行）、4 相册、1 邀请码；cloud_photos=0**（上传链路 10-14 修复后首次跑通，测试数据已清理）。
 - **⚠️ `deploy --data` 会用本地库（users=1/albums=0）抹掉服务器家庭数据**——数据部署前必须先 SSH 备份 + 定合并策略。
 - 观测数据：本地 516/387（10-02），服务器 509/384（08-29）。
+- **服务器 venv 需 pillow**（10-14 补装；部署脚本不装依赖，环境漂移无感知——新增依赖要手动 ssh 装）。
 
-**已确认的代码病灶**（详见 `docs/观鸟网站技术报告-2026-10-14.md`）：
-- P0-2：相册 6 端点 500（v1→v2 漏移植 4 个函数 + list_album_photos 实参不匹配）
-- P0-3：存量库 cloud_photos.album_id NOT NULL 导致上传必败；file_hash 无 UNIQUE
-- P0-4：POST /api/scan 无鉴权
-- P1-11：相册上传无类型白名单（存储型 XSS 可窃取 key）
+**相册功能已复活（10-14）**：sharing_v2 补齐 4 函数、重建表迁移、邀请原子化、GC、上传白名单；
+**Cookie 登录态**：`POST /api/auth/session` 种 HttpOnly cookie，`<img>`/`window.open` 靠它鉴权；
+**前端结构**：`static/` = index.html + `css/app.css` + 10 个 `js/*.js` 模块（无构建）；
+**测试**：`tests/test_api.py`（TestClient 8 用例，`TMPDIR` 需用干净目录绕沙箱 broker）+ `tests/e2e_test.py`（Playwright 7 用例，`BIRDING_BASE`/`BIRDING_TEST_KEY` 可配）。
+
+**已修复的代码病灶**（详见 `docs/观鸟网站技术报告-2026-10-14.md` 文末执行记录）：
+- ~~P0-2/P0-3/P0-4/P1-11~~ 全部已修；新发现：嵌套 conn_ctx 写锁 BUSY、服务器缺 pillow、
+  api() headers 覆盖 bug、上传后延迟刷新竞态——均有回归测试覆盖。
+
+**小程序路径结论**（`docs/小程序发布流程调研报告-2026-10-14.md`）：
+多人互相上传=UGC→「社交-笔记」类目→**个人主体不开放，需个体户/企业主体**；
+折中方案：仅 owner 上传+家人浏览→个人主体「工具-图片」类目可上线。域名+ICP+HTTPS 是硬前提。
 
 ## 开发规范（长期记忆，必须遵守）
 

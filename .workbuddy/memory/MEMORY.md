@@ -106,6 +106,13 @@
 **前端结构**：`static/` = index.html + `css/app.css` + 10 个 `js/*.js` 模块（无构建）；
 **测试**：`tests/test_api.py`（TestClient 8 用例，`TMPDIR` 需用干净目录绕沙箱 broker）+ `tests/e2e_test.py`（Playwright 7 用例，`BIRDING_BASE`/`BIRDING_TEST_KEY` 可配）。
 
+**路线 C 重构已完成（10-14 晚，TDD 红绿 commit）**：
+- 模型：`groups` 表 + `users/albums/invites.group_id` + `observations.owner_id`（存量回填 owner）；
+  读范围三级（匿名=所有者公开数据 / member=仅自己 / owner=全部，`web._read_scope` 一行可改严格隔离）；
+  邀请码绑定组（入组后组内相册全可见）；上传归属当前用户；写操作用户级鉴权+归属校验。
+- Web 启动跑 `store.init_db()` + `sharing.init_sharing()`（schema 自愈，不依赖 CLI）。
+- 测试：`tests/test_scoping.py` 8 + `tests/test_groups.py` 8 + test_api 8，共 24/24；生产 E2E 7/7。
+
 **已修复的代码病灶**（详见 `docs/观鸟网站技术报告-2026-10-14.md` 文末执行记录）：
 - ~~P0-2/P0-3/P0-4/P1-11~~ 全部已修；新发现：嵌套 conn_ctx 写锁 BUSY、服务器缺 pillow、
   api() headers 覆盖 bug、上传后延迟刷新竞态——均有回归测试覆盖。

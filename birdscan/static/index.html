@@ -3,215 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="var(--teal)">
+<meta name="theme-color" content="#007aff">
 <link rel="manifest" href="/manifest.json">
 <title>我的观鸟档案</title>
-<style>
-:root{
-  /* 亮色主题（Apple Photos 风格） */
-  --bg:#f5f5f7; --panel:#ffffff; --panel2:#f5f5f7; --line:#d2d2d7;
-  --tx:#1d1d1f; --tx2:#6e6e73; --tx3:#86868b;
-  --teal:#007aff; --amber:#ff9500; --red:#ff3b30;
-  --shadow:0 2px 8px rgba(0,0,0,.08);
-}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--tx);
-  font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
-a{color:var(--teal);text-decoration:none}
-.wrap{max-width:1280px;margin:0 auto;padding:24px 20px 60px}
-h1{font-size:20px;font-weight:600;margin:0;color:var(--tx)}
-h2{font-size:15px;font-weight:600;margin:0 0 14px;color:var(--tx)}
-h3{font-size:13px;font-weight:600;margin:0 0 10px;color:var(--tx2)}
-.muted{color:var(--tx2)}.tiny{font-size:12px;color:var(--tx3)}
-
-header{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:18px}
-header .sp{flex:1}
-
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:20px}
-.stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;
-  box-shadow:var(--shadow)}
-.stat .n{font-size:24px;font-weight:600;line-height:1.2;color:var(--tx)}
-.stat .l{font-size:12px;color:var(--tx3)}
-
-.tabs{display:flex;gap:4px;margin-bottom:18px;border-bottom:1px solid var(--line)}
-.tab{padding:10px 16px;cursor:pointer;color:var(--tx2);border-bottom:2px solid transparent;
-  font-size:14px;font-weight:500;transition:all .2s}
-.tab.on{color:var(--teal);border-bottom-color:var(--teal)}
-.tab:hover{color:var(--tx);background:var(--panel2);border-radius:8px 8px 0 0}
-
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;
-  cursor:pointer;transition:border-color .15s}
-.card:hover{border-color:var(--teal)}
-.card .ph{width:100%;aspect-ratio:4/3;object-fit:cover;background:var(--panel2);display:block}
-.card .ph.empty{display:flex;align-items:center;justify-content:center;color:var(--tx3);font-size:12px}
-.card .bd{padding:10px 12px 12px}
-.card .nm{font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.card .sc{font-size:11px;color:var(--tx3);font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.card .ft{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:var(--tx3)}
-.badge{background:rgba(63,191,160,.14);color:var(--teal);padding:1px 7px;border-radius:20px;font-size:11px}
-
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:16px;
-  box-shadow:var(--shadow)}
-.viz{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px}
-
-.cal{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);gap:2px;overflow-x:auto;padding-bottom:4px}
-.cal i{width:11px;height:11px;border-radius:2px;background:#e8e8ed;display:block}
-.cal i.d{background:transparent}
-.lg{display:flex;align-items:center;gap:5px;margin-top:10px;font-size:11px;color:var(--tx3)}
-.lg i{width:10px;height:10px;border-radius:2px;display:block}
-
-.bar{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px}
-.bar .nm{width:130px;text-align:right;color:var(--tx2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bar .tk{flex:1;height:14px;background:var(--panel2);border-radius:3px;overflow:hidden}
-.bar .fl{height:100%;background:var(--teal);border-radius:3px}
-.bar .vl{width:56px;color:var(--tx3);font-size:11px}
-
-.hr{display:flex;align-items:flex-end;gap:2px;height:70px}
-.hr div{flex:1;background:var(--amber);border-radius:2px 2px 0 0;min-height:2px}
-.hrl{display:flex;gap:2px;margin-top:4px;font-size:10px;color:var(--tx3)}
-.hrl span{flex:1;text-align:center}
-
-input,select{background:var(--panel2);border:1px solid var(--line);color:var(--tx);
-  border-radius:7px;padding:7px 10px;font-size:13px;font-family:inherit}
-input:focus,select:focus{outline:none;border-color:var(--teal)}
-input{flex:1;max-width:280px}
-
-#mask{position:absolute;inset:0;background:rgba(0,0,0,.6);display:none;z-index:40}
-#modal{display:none;position:fixed;top:5vh;left:50%;transform:translateX(-50%);
-  width:min(920px,94vw);max-height:88vh;overflow:auto;background:var(--panel);
-  border:1px solid var(--line);border-radius:14px;z-index:50;padding:20px}
-#modal .x{position:sticky;top:0;float:right;cursor:pointer;color:var(--tx2);font-size:20px;line-height:1}
-.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:12px 0}
-.gal img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;background:var(--panel2);cursor:zoom-in}
-.obs{border-top:1px solid var(--line);padding:9px 0;font-size:13px}
-.obs:first-of-type{border-top:none}
-.obs .d{color:var(--amber);font-variant-numeric:tabular-nums}
-.obs .p{color:var(--tx2)}
-.obs .n{color:var(--tx3);font-size:12px}
-.empty{text-align:center;padding:50px 20px;color:var(--tx3)}
-
-/* ---------------- 地图（Apple Photos 风格） */
-#map{position:relative}
-#mapContainer{height:min(66vh,640px);border-radius:12px;border:1px solid var(--line);z-index:1}
-#cellPanel{position:absolute;top:12px;right:12px;width:280px;max-height:calc(100% - 24px);
-  overflow:auto;background:rgba(28,31,38,.94);border:1px solid var(--line);border-radius:12px;
-  padding:14px;z-index:20;display:none;backdrop-filter:blur(8px)}
-#cellPanel h3{margin:0 0 8px}
-#cellPanel .close{float:right;cursor:pointer;color:var(--tx2);font-size:18px;line-height:1}
-.cellItem{display:flex;gap:10px;padding:7px 0;border-top:1px solid var(--line);cursor:pointer}
-.cellItem:first-of-type{border-top:none}
-.cellItem img{width:52px;height:52px;border-radius:7px;object-fit:cover;background:var(--panel2);flex:none}
-.cellItem .t{font-size:13px}
-.cellItem .m{font-size:11px;color:var(--tx3)}
-.pin{background:rgba(63,191,160,.92);color:#06231c;border-radius:50%;display:flex;
-  align-items:center;justify-content:center;font:500 12px/1 -apple-system,sans-serif;
-  border:2px solid rgba(255,255,255,.75);box-shadow:0 2px 8px rgba(0,0,0,.5);text-align:center}
-.leaflet-container{background:#14161a;font:inherit}
-.leaflet-control-attribution{background:rgba(20,22,26,.7)!important;color:var(--tx3)!important;font-size:10px}
-.leaflet-control-attribution a{color:var(--tx2)}
-.leaflet-bar a{background:var(--panel)!important;color:var(--tx)!important;border-color:var(--line)!important}
-.mspec{background:rgba(232,163,61,.92)}
-.meta{font-size:12.5px;color:var(--tx2);line-height:1.7;margin:10px 0}
-.ext{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
-.ext a{background:var(--panel2);border:1px solid var(--line);border-radius:7px;
-  padding:4px 10px;font-size:12px;color:var(--teal)}
-.ext a:hover{border-color:var(--teal)}
-.prot{background:rgba(226,88,90,.15);color:var(--red);padding:2px 8px;border-radius:6px;font-size:11px}
-
-/* ---------------- 复核工作流 */
-.reviewItem{display:flex;gap:14px;padding:12px 0;border-top:1px solid var(--line);align-items:flex-start}
-.reviewItem:first-of-type{border-top:none}
-.reviewItem img{width:100px;height:100px;border-radius:8px;object-fit:cover;background:var(--panel2);flex:none;cursor:zoom-in}
-.reviewItem .info{flex:1;min-width:0}
-.reviewItem .nm{font-weight:500;margin-bottom:3px}
-.reviewItem .meta{font-size:12px;color:var(--tx2);line-height:1.6}
-.reviewItem .conf{font-size:11px;color:var(--amber)}
-.reviewItem .acts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
-.reviewItem .acts button{padding:5px 12px;border-radius:7px;border:1px solid var(--line);
-  background:var(--panel2);color:var(--tx);font:500 12px inherit;cursor:pointer}
-.reviewItem .acts button.danger{background:rgba(226,88,90,.15);color:var(--red);border-color:rgba(226,88,90,.3)}
-.reviewItem .acts button.primary{background:var(--teal);color:#fff;border:0}
-.reviewItem .acts button:hover{filter:brightness(1.1)}
-.reassignBox{display:flex;gap:6px;margin-top:8px}
-.reassignBox input{flex:1;padding:5px 10px;border-radius:7px;border:1px solid var(--line);
-  background:var(--panel2);color:var(--tx);font:12px inherit}
-
-/* ---------------- 加新上传弹窗 */
-#addBtn{background:var(--teal);color:#fff;border:0;border-radius:8px;
-  padding:8px 16px;font:500 13px inherit;cursor:pointer;white-space:nowrap}
-#addBtn:hover{filter:brightness(1.1)}
-#addModal{display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-  width:min(460px,92vw);background:var(--panel);border:1px solid var(--line);
-  border-radius:14px;z-index:60;padding:22px}
-#addModal h2{margin:0 0 14px}
-#addModal .row{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
-#addModal label{font-size:12px;color:var(--tx2)}
-#addModal input[type=file]{padding:20px;border:1.5px dashed var(--line);border-radius:10px;
-  background:var(--panel2);cursor:pointer;font-size:13px}
-#addModal .act{display:flex;gap:8px;margin-top:16px}
-#addModal .act button{flex:1;padding:9px;border-radius:8px;border:1px solid var(--line);
-  background:var(--panel2);color:var(--tx);font:500 13px inherit;cursor:pointer}
-#addModal .act button.primary{background:var(--teal);color:#fff;border:0}
-#addModal .act button:disabled{opacity:.5;cursor:not-allowed}
-#addResult{margin-top:14px;font-size:13px;line-height:1.6;display:none}
-#addResult.ok{color:var(--teal)} #addResult.err{color:var(--red)}
-
-/* ========== 手机端适配（Instagram 风格） ========== */
-@media (max-width: 768px) {
-  .wrap{padding:12px 12px 80px}
-  
-  /* 顶部导航 */
-  header{margin-bottom:12px;padding:12px 0;border-bottom:1px solid var(--line)}
-  h1{font-size:18px;font-weight:700}
-  
-  /* Tab 横向滚动 */
-  .tabs{overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch;
-    scrollbar-width:none;margin-bottom:12px}
-  .tabs::-webkit-scrollbar{display:none}
-  .tab{padding:12px 16px;font-size:15px;flex-shrink:0}
-  
-  /* 统计卡片 */
-  .stats{grid-template-columns:repeat(2,1fr);gap:8px}
-  .stat{padding:12px}
-  .stat .n{font-size:20px}
-  
-  /* 物种墙：大图片网格 */
-  .grid{grid-template-columns:repeat(3,1fr)!important;gap:2px!important}
-  .grid .card{border-radius:0!important;border:0!important}
-  .grid .card img{border-radius:0!important}
-  
-  /* 相册：单列 */
-  .reviewItem{flex-direction:column;align-items:flex-start}
-  .reviewItem img{width:100%!important;height:auto!important;aspect-ratio:1}
-  
-  /* 按钮加大 */
-  button{padding:14px 20px!important;font-size:15px!important;border-radius:12px!important}
-  input,select{padding:14px!important;font-size:15px!important;border-radius:12px!important}
-  
-  /* 底部导航栏（Instagram 风格） */
-  .wrap::after{content:'';display:block;height:60px}
-  .bottomNav{position:fixed;bottom:0;left:0;right:0;background:var(--panel);
-    border-top:1px solid var(--line);display:flex;justify-content:space-around;
-    padding:8px 0;z-index:100;box-shadow:0 -2px 8px rgba(0,0,0,.08)}
-  .bottomNav a{display:flex;flex-direction:column;align-items:center;gap:4px;
-    color:var(--tx2);font-size:11px;text-decoration:none;padding:4px 12px}
-  .bottomNav a.on{color:var(--teal)}
-  .bottomNav .icon{font-size:24px}
-}
-
-/* 平板 */
-@media (min-width: 769px) and (max-width: 1024px) {
-  .wrap{max-width:100%;padding:16px}
-  .grid{grid-template-columns:repeat(4,1fr)!important}
-}
-</style>
+<link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body>
 <div class="wrap">
   <header>
     <h1>我的观鸟档案</h1>
     <span class="sp"></span>
+    <span class="scopeChip" id="scopeChip" title="长程重构后支持按用户/家庭组筛选">数据范围：全部</span>
     <input id="q" placeholder="搜索鸟名 / 学名 / 科" autocomplete="off">
     <select id="ord">
       <option value="count">按观测次数</option>
@@ -224,11 +26,16 @@ input{flex:1;max-width:280px}
       <option value="0.25">置信度 ≥25%</option>
       <option value="0">全部（含噪声）</option>
     </select>
-    <button id="addBtn" onclick="$('#addModal').style.display='block'">＋ 加新</button>
-    <button id="keyBtn" onclick="showKeyModal()" style="background:var(--panel2);color:var(--tx2);
-      border:1px solid var(--line);border-radius:8px;padding:8px 12px;font:500 13px inherit;
-      cursor:pointer" title="设置 API Key">🔑</button>
+    <button id="addBtn" class="btn primary">＋ 加新</button>
+    <span id="userBadge" class="userBadge"></span>
+    <button id="keyBtn" class="btn" title="设置 API Key">🔑</button>
   </header>
+
+  <div id="regBanner">
+    <span>你收到了家庭相册的邀请链接 🎉</span>
+    <button id="regBtn" class="btn primary sm">接受邀请并注册</button>
+    <button id="regSkip" class="btn sm ghost">暂不</button>
+  </div>
 
   <div class="stats" id="stats"></div>
 
@@ -242,23 +49,21 @@ input{flex:1;max-width:280px}
     <div class="tab" data-t="run">扫描与识别</div>
   </div>
 
-  <div id="wall"><div class="grid" id="grid"></div></div>
+  <div id="t-wall"><div class="grid" id="grid"></div></div>
 
-  <div id="map" style="display:none">
+  <div id="t-map" style="display:none;position:relative">
     <div id="mapContainer"></div>
     <div id="cellPanel"></div>
   </div>
 
-  <div id="viz" style="display:none">
+  <div id="t-viz" style="display:none">
     <div class="viz">
       <div class="panel">
         <h2>观测热力日历</h2>
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-          <button id="calPrev" style="padding:4px 10px;border-radius:6px;border:1px solid var(--line);
-            background:var(--panel2);color:var(--tx);font:12px inherit;cursor:pointer">← 上月</button>
+          <button id="calPrev" class="btn sm">← 上月</button>
           <h3 id="calY" style="margin:0;flex:1;text-align:center"></h3>
-          <button id="calNext" style="padding:4px 10px;border-radius:6px;border:1px solid var(--line);
-            background:var(--panel2);color:var(--tx);font:12px inherit;cursor:pointer">下月 →</button>
+          <button id="calNext" class="btn sm">下月 →</button>
         </div>
         <div class="cal" id="cal"></div>
         <div class="lg"><span>少</span>
@@ -286,48 +91,11 @@ input{flex:1;max-width:280px}
     </div>
   </div>
 
-  <div id="albums" style="display:none">
-    <div class="panel">
-      <h2>家庭相册</h2>
-      <p class="tiny">家人共享的观鸟相册。点 🔑 设置 API Key 后可上传。</p>
-      
-      <!-- 相册二级 tab -->
-      <div style="display:flex;gap:6px;margin:12px 0;flex-wrap:wrap" id="albumTabs">
-        <div class="tab" data-album="all" style="padding:6px 12px;font-size:12px">全部</div>
-      </div>
-      
-      <div style="display:flex;gap:8px;margin:10px 0">
-        <input id="newAlbumName" placeholder="新相册名（例如：深圳湾 2026 春）" style="flex:1;padding:8px;border-radius:8px;
-          border:1px solid var(--line);background:var(--panel2);color:var(--tx);font:13px inherit">
-        <button onclick="createAlbum()" style="background:var(--teal);color:#fff;border:0;
-          border-radius:8px;padding:8px 16px;font:500 13px inherit;cursor:pointer" title="创建新相册，默认只有你能看到">创建相册</button>
-        <button onclick="showInviteModal()" style="background:var(--panel2);color:var(--tx);border:1px solid var(--line);
-          border-radius:8px;padding:8px 16px;font:500 13px inherit;cursor:pointer" title="生成邀请链接，家人注册后只能看到你勾选的相册">邀请家人</button>
-      </div>
-      <div id="albumList"></div>
-      <div id="albumDetail" style="display:none;margin-top:16px">
-        <h3 id="albumTitle"></h3>
-        <div style="display:flex;gap:8px;margin:10px 0">
-          <input type="file" id="albumFiles" accept="image/*,video/*" multiple style="flex:1">
-          <button onclick="uploadToAlbum()" style="background:var(--teal);color:#fff;border:0;
-            border-radius:8px;padding:8px 16px;font:500 13px inherit;cursor:pointer">批量上传</button>
-          <button onclick="downloadAlbum()" style="background:var(--panel2);color:var(--tx);border:1px solid var(--line);
-            border-radius:8px;padding:8px 16px;font:500 13px inherit;cursor:pointer">下载整本</button>
-          <button onclick="deleteAlbum()" style="background:var(--red);color:#fff;border:0;
-            border-radius:8px;padding:8px 16px;font:500 13px inherit;cursor:pointer" title="删除相册（不可恢复）">删除相册</button>
-        </div>
-        <div id="uploadProgress"></div>
-        <div id="albumPhotos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-top:12px"></div>
-      </div>
-    </div>
-  </div>
-
-  <div id="rec" style="display:none">
+  <div id="t-rec" style="display:none">
     <div class="panel">
       <h2>推荐清单</h2>
       <div style="display:flex;gap:8px;margin-bottom:12px">
-        <select id="recNameType" style="padding:6px 10px;border-radius:6px;border:1px solid var(--line);
-          background:var(--panel2);color:var(--tx);font:12px inherit">
+        <select id="recNameType" class="btn sm" style="padding:6px 10px">
           <option value="cn">中文学名</option>
           <option value="cn_com">中文俗称</option>
           <option value="en">英文学名</option>
@@ -339,7 +107,39 @@ input{flex:1;max-width:280px}
     </div>
   </div>
 
-  <div id="review" style="display:none">
+  <div id="t-albums" style="display:none">
+    <div class="panel">
+      <h2>家庭相册</h2>
+      <p class="tiny">家人共享的观鸟相册。点 🔑 设置 API Key 登录后可上传、下载、邀请家人。</p>
+
+      <div class="albumTabs" id="albumTabs">
+        <div class="tab on" data-album="all">全部</div>
+      </div>
+
+      <div class="albumToolbar">
+        <input id="newAlbumName" placeholder="新相册名（例如：深圳湾 2026 春）" style="flex:1;max-width:320px">
+        <button id="btnCreateAlbum" class="btn primary" title="创建新相册，默认只有你能看到">创建相册</button>
+        <button id="btnInvite" class="btn" title="生成邀请链接，家人注册后只能看到你勾选的相册">邀请家人</button>
+      </div>
+
+      <div id="albumList"></div>
+
+      <div id="albumDetail" style="display:none;margin-top:16px">
+        <h3 id="albumTitle"></h3>
+        <div class="albumToolbar">
+          <button id="btnAlbumUpload" class="btn primary">上传照片</button>
+          <button id="btnAlbumDownload" class="btn">下载整本</button>
+          <button id="btnAlbumDelete" class="btn danger" title="删除相册（不可恢复）">删除相册</button>
+        </div>
+        <div id="albumDrop" class="dropzone">点这里选择照片，或把照片拖进来（JPG/PNG/WebP/HEIC/视频，单张 ≤50MB）</div>
+        <input type="file" id="albumFiles" accept="image/*,video/*" multiple style="display:none">
+        <div id="uploadProgress"></div>
+        <div id="albumPhotos"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="t-review" style="display:none">
     <div class="panel">
       <h2>不是我的鸟？</h2>
       <p class="tiny">存疑样本（低置信度 或 不在中国名录）。标记「不是鸟」会删除照片和观测；「分类错误」会改到正确物种下。</p>
@@ -347,15 +147,14 @@ input{flex:1;max-width:280px}
     </div>
   </div>
 
-  <div id="run" style="display:none">
+  <div id="t-run" style="display:none">
     <div class="panel">
       <h2>手动扫描</h2>
       <p class="tiny">扫描照片库并挑出候选照片进入识别队列。全库首次扫描约需 10–20 分钟。</p>
-      <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+      <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
         <input id="lim" type="number" placeholder="限制张数（留空=全部）" style="max-width:200px">
-        <label class="tiny"><input type="checkbox" id="frc" style="max-width:auto"> 忽略水位线重扫</label>
-        <button id="btnScan" style="background:var(--teal);color:#fff;border:0;
-          border-radius:7px;padding:8px 16px;font:500 13px inherit;cursor:pointer">开始扫描</button>
+        <label class="row tiny"><input type="checkbox" id="frc" style="max-width:auto"> 忽略水位线重扫</label>
+        <button id="btnScan" class="btn primary">开始扫描</button>
       </div>
       <pre id="scanOut" class="tiny" style="white-space:pre-wrap;margin-top:12px;display:none"></pre>
     </div>
@@ -370,43 +169,39 @@ input{flex:1;max-width:280px}
 <div id="mask"></div>
 <div id="modal"></div>
 
-<div id="keyModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
-  width:min(400px,92vw);background:var(--panel);border:1px solid var(--line);border-radius:14px;
-  z-index:60;padding:22px">
-  <h2>API Key 设置</h2>
+<!-- API Key 登录 -->
+<div id="keyModal" class="dialog">
+  <h2>API Key 登录</h2>
   <div class="row">
-    <label>写操作（删除/复核/上传）需要 API Key</label>
-    <input id="apiKeyInput" type="password" placeholder="输入 API Key" style="padding:10px;border-radius:8px;
-      border:1px solid var(--line);background:var(--panel2);color:var(--tx);font:13px inherit">
+    <label>写操作（删除/复核/上传）和家庭相册需要 API Key</label>
+    <input id="apiKeyInput" type="password" placeholder="输入 API Key">
   </div>
   <div class="act">
-    <button onclick="closeKeyModal()">取消</button>
-    <button class="primary" onclick="saveApiKey()">保存</button>
+    <button id="btnCloseKey" class="btn">取消</button>
+    <button id="btnSaveKey" class="btn primary">保存并登录</button>
   </div>
 </div>
 
 <!-- 邀请码弹窗 -->
-<div id="inviteModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
-  width:min(500px,92vw);background:var(--panel);border:1px solid var(--line);border-radius:14px;
-  z-index:60;padding:22px">
+<div id="inviteModal" class="dialog">
   <h2>邀请家人</h2>
   <div class="row">
     <label>选择相册权限（默认全选）</label>
-    <div id="inviteAlbums" style="max-height:200px;overflow-y:auto;margin:10px 0"></div>
+    <div id="inviteAlbums" class="inviteAlbums"></div>
   </div>
   <div class="act">
-    <button onclick="closeInviteModal()">取消</button>
-    <button class="primary" onclick="generateInvite()">生成邀请码</button>
+    <button class="btn" onclick="B.closeDialog('#inviteModal')">取消</button>
+    <button id="btnGenerateInvite" class="btn primary">生成邀请码</button>
   </div>
-  <div id="inviteResult" style="display:none;margin-top:16px;padding:12px;background:var(--panel2);border-radius:8px">
+  <div id="inviteResult" style="display:none;margin-top:16px">
     <div class="tiny">邀请链接（发给家人，只能用一次）：</div>
-    <div id="inviteLink" style="font-family:monospace;font-size:12px;word-break:break-all;margin:8px 0"></div>
-    <button onclick="copyInviteLink()" style="background:var(--teal);color:#fff;border:0;
-      border-radius:6px;padding:6px 12px;font:12px inherit;cursor:pointer">复制链接</button>
+    <div id="inviteLink" class="inviteLink"></div>
+    <button id="btnCopyInvite" class="btn sm primary">复制链接</button>
   </div>
 </div>
 
-<div id="addModal">
+<!-- 加新上传 -->
+<div id="addModal" class="dialog">
   <h2>加新</h2>
   <div class="row">
     <label>图片或视频（JPG/PNG/HEIC/WebP/MP4/MOV，最大 200MB）</label>
@@ -421,811 +216,30 @@ input{flex:1;max-width:280px}
     <input id="addPlace" placeholder="例如：深圳湾公园">
   </div>
   <div class="act">
-    <button onclick="closeAdd()">取消</button>
-    <button class="primary" id="addGo" onclick="doAdd()">上传并识别</button>
+    <button id="btnAddCancel" class="btn">取消</button>
+    <button id="btnAddGo" class="btn primary">上传并识别</button>
   </div>
   <div id="addResult"></div>
 </div>
 
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script>
-const $ = s => document.querySelector(s);
-const $$ = s => document.querySelectorAll(s);
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-// STATIC_MODE = true 时走静态 JSON（GitHub Pages），false 时走 FastAPI（localhost）
-const STATIC_MODE = false;  // 服务器部署，始终走动态 API
-const API = p => `/api/${p}`;
-const imgUrl = p => {
-  if(!p) return '';
-  if(p.startsWith('thumbs/')) return '/' + p;  // 相对路径直接走 Nginx
-  return '/img?path=' + encodeURIComponent(p);  // 绝对路径走 FastAPI 代理
-};
-let ALL = [];
-
-// API Key 管理（写操作需要鉴权）
-function getApiKey(){ return localStorage.getItem('birding_api_key') || ''; }
-function setApiKey(k){ localStorage.setItem('birding_api_key', k); }
-function apiHeaders(){
-  const k = getApiKey();
-  return k ? {'X-API-Key': k} : {};
-}
-
-// ---------------------------------------------------------------- 加载
-const mc = () => $('#mc').value;
-
-async function load(){
-  const [st, sp] = await Promise.all([
-    fetch('/api/stats').then(r=>r.json()),
-    fetch('/api/species').then(r=>r.json())
-  ]);
-  // 静态模式下在前端做排序/搜索/置信度过滤
-  let list = sp;
-  if(false){
-    const q = $('#q').value.toLowerCase();
-    const order = $('#ord').value;
-    const minC = parseFloat($('#mc').value);
-    if(q) list = list.filter(s=>
-      (s.common_name_cn||'').toLowerCase().includes(q) ||
-      (s.scientific_name||'').toLowerCase().includes(q) ||
-      (s.common_name_en||'').toLowerCase().includes(q) ||
-      (s.family_cn||'').toLowerCase().includes(q));
-    if(minC > 0) list = list.filter(s => (s.best_conf || 0) >= minC);
-    if(order==='recent') list.sort((a,b)=>(b.last_date||'').localeCompare(a.last_date||''));
-    else if(order==='name') list.sort((a,b)=>(a.common_name_cn||'').localeCompare(b.common_name_cn||''));
-  }
-  // 静态模式下根据过滤后的列表重新计算 stats
-  let statsData = st;
-  if(false){
-    const places = new Set(list.map(s => s.top_place).filter(Boolean)).size;
-    statsData = {
-      ...st,
-      species_confident: list.length,
-      places_confident: places,
-    };
-  }
-  // 保护级别统计（从物种列表里数）
-  const prot1 = list.filter(s => s.china_protection === '一级').length;
-  const prot2 = list.filter(s => s.china_protection === '二级').length;
-  const iucnThreat = list.filter(s => ['CR','EN','VU'].includes(s.iucn_status)).length;
-  $('#stats').innerHTML = [
-    ['鸟种', statsData.species_confident ?? statsData.species],
-    ['观测次数', statsData.observations_confident ?? statsData.observations],
-    ['地点', statsData.places_confident ?? statsData.places],
-    ['照片', statsData.photos],
-    ['待复核', statsData.needs_review ?? 0],
-    ['国家一级', prot1 || '—'],
-    ['国家二级', prot2 || '—'],
-    ['IUCN 受胁', iucnThreat || '—'],
-  ].map(([l,n])=>`<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
-
-  ALL = list;
-  const g = $('#grid');
-  if(!list.length){
-    g.innerHTML = `<div class="empty">还没有观测记录。<br>去「扫描与识别」标签页跑一次扫描。</div>`;
-    return;
-  }
-  g.innerHTML = sp.map(s=>{
-    const src = s.thumb || s.img;
-    return `<div class="card" data-id="${s.id}">
-      ${src ? `<img class="ph" loading="lazy" src="${imgUrl(src)}" onerror="this.className='ph empty';this.textContent='无图'">`
-            : `<div class="ph empty">无图</div>`}
-      <div class="bd">
-        <div class="nm" title="${esc(s.common_name_cn)}">${esc(s.common_name_cn)}</div>
-        <div class="sc">${esc(s.scientific_name||'')}</div>
-        <div class="ft"><span class="badge">${s.cnt} 次</span>
-          <span>${esc((s.last_date||'').slice(5))}</span></div>
-      </div></div>`;
-  }).join('');
-  g.querySelectorAll('.card').forEach(c=>c.onclick=()=>openSpecies(c.dataset.id));
-}
-
-// ---------------------------------------------------------------- 详情
-async function openSpecies(id){
-  const d = await fetch(`/api/species/${id}`).then(r=>r.json());
-  const s = d.species;
-  const photos = d.observations.flatMap(o=>(o.photos||[]).map(p=>({p,o})));
-  $('#modal').innerHTML = `
-    <span class="x" onclick="closeM()">&times;</span>
-    <h1>${esc(s.common_name_cn)}</h1>
-    <div class="tiny" style="font-style:italic">${esc(s.scientific_name||'')}</div>
-    <div class="tiny" style="margin-top:6px">
-      ${[s.order_cn, s.family_cn].filter(Boolean).map(esc).join(' · ')}
-      ${s.iucn_status?` · IUCN ${esc(s.iucn_status)}`:''}
-      ${s.china_protection?`<span class="prot">国家${esc(s.china_protection)}保护</span>`:''}
-    </div>
-    ${s.summary?`<div class="meta">${esc(s.summary)}</div>`:''}
-    ${extLinksHtml(s.links_json)}
-    ${s.scientific_name?`<div style="margin:10px 0">
-      <a href="https://xeno-canto.org/explore?query=sp%3A%22${encodeURIComponent(s.scientific_name)}%22"
-         target="_blank" rel="noopener" style="background:var(--panel2);border:1px solid var(--line);
-         border-radius:8px;padding:6px 14px;font-size:13px;color:var(--teal);text-decoration:none">
-        🔊 听叫声（Xeno-canto）</a>
-      <span class="tiny" style="margin-left:8px">跳转到 Xeno-canto 搜索页</span>
-    </div>`:''}
-    <div style="margin:12px 0" class="tiny">共 <b style="color:var(--amber)">${d.count}</b> 次观测
-      ${d.places.length? ' · 地点：'+d.places.slice(0,6).map(esc).join('、'):''}</div>
-    ${photos.length?`<div class="gal">${photos.slice(0,24).map(x=>
-      `<img loading="lazy" src="${imgUrl(x.p.thumb_cache||x.p.image_path)}"
-        title="${esc(x.o.obs_date)} ${esc(x.o.place_name||'')}" onclick="window.open(this.src)">`).join('')}</div>`:''}
-    <h2 style="margin-top:18px">观测记录</h2>
-    ${d.observations.map(o=>`<div class="obs" data-obs="${o.id}">
-      <span class="d">${esc(o.obs_date)}</span>
-      <span class="p">${esc(o.place_name||'（无地点）')}</span>
-      ${o.confidence!=null?`<span class="tiny"> 置信度 ${(o.confidence*100).toFixed(0)}%</span>`:''}
-      ${o.notes?`<div class="n">${esc(o.notes)}</div>`:''}
-      ${!STATIC_MODE?`<button class="danger" style="margin-top:6px;padding:4px 10px;font-size:11px"
-        onclick="deleteObs(${o.id}, this)">删除此观测</button>`:''}
-    </div>`).join('')}`;
-  $('#modal').style.display='block'; $('#mask').style.display='block';
-}
-function extLinksHtml(lj){
-  if(!lj) return '';
-  let links; try{ links = JSON.parse(lj);}catch(e){ return ''; }
-  const ks = Object.keys(links);
-  if(!ks.length) return '';
-  return `<div class="ext">${ks.map(k=>
-    `<a href="${links[k]}" target="_blank" rel="noopener">${esc(k)} ↗</a>`).join('')}</div>`;
-}
-function closeM(){ $('#modal').style.display='none'; $('#mask').style.display='none'; }
-async function deleteObs(obsId, btn){
-  if(!confirm('确认删除这条观测及其所有照片？')) return;
-  btn.disabled = true;
-  const r = await fetch(`/api/observation/${obsId}`, {method:'DELETE', headers: apiHeaders()}).then(r=>r.json());
-  btn.closest('.obs').style.opacity = '0.3';
-  btn.textContent = `已删除（${r.deleted_photos} 张照片）`;
-  setTimeout(()=>{ closeM(); load(); }, 800);
-}
-$('#mask').onclick = closeM;
-document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeM(); });
-
-// ---------------------------------------------------------------- 可视化
-async function loadViz(){
-  const y = new Date().getFullYear();
-  const [cal, tl, pl, hr] = await Promise.all([
-    fetch(`/api/calendar?year=${y}`).then(r=>r.json()),
-    fetch('/api/timeline').then(r=>r.json()),
-    fetch('/api/places').then(r=>r.json()),
-    fetch('/api/hours').then(r=>r.json()),
-  ]);
-
-  // 热力日历（按月翻页）
-  let calYear = new Date().getFullYear();
-  let calMonth = new Date().getMonth() + 1;
-  function renderCal(){
-    $('#calY').textContent = `${calYear} 年 ${calMonth} 月`;
-    const map = {}; cal.days.forEach(d=>map[d.date]=d.count);
-    const first = new Date(calYear, calMonth-1, 1);
-    const last = new Date(calYear, calMonth, 0);
-    const off = first.getDay();
-    let cells = '';
-    for(let i=0;i<off;i++) cells += '<i class="d"></i>';
-    for(let d=new Date(first); d<=last; d.setDate(d.getDate()+1)){
-      const iso = d.toISOString().slice(0,10);
-      const c = map[iso]||0;
-      const bg = c===0?'#e8e8ed': c===1?'#c7e5ff': c===2?'#7cc4ff':'#007aff';
-      cells += `<i style="background:${bg}" title="${iso}: ${c} 次"></i>`;
-    }
-    $('#cal').innerHTML = cells;
-  }
-  $('#calPrev').onclick = ()=>{
-    calMonth--; if(calMonth<1){ calMonth=12; calYear--; }
-    renderCal();
-  };
-  $('#calNext').onclick = ()=>{
-    calMonth++; if(calMonth>12){ calMonth=1; calYear++; }
-    renderCal();
-  };
-  renderCal();
-
-  // 累计增长曲线
-  if(tl.length){
-    const W=380,H=150,P=26;
-    const maxN = tl[tl.length-1].cumulative||1;
-    const t0 = new Date(tl[0].date).getTime(), t1 = new Date(tl[tl.length-1].date).getTime()||t0+1;
-    const pts = tl.map(p=>{
-      const x = P + (new Date(p.date).getTime()-t0)/(t1-t0)*(W-2*P);
-      const yy = H-P - p.cumulative/maxN*(H-2*P);
-      return `${x.toFixed(1)},${yy.toFixed(1)}`;
-    }).join(' ');
-    $('#tl').innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="150">
-      <polyline points="${pts}" fill="none" stroke="var(--teal)" stroke-width="1.8"/>
-      <text x="${P}" y="14" fill="#6b7382" font-size="10">${maxN} 种</text>
-      <text x="${P}" y="${H-6}" fill="#6b7382" font-size="10">${esc(tl[0].date)}</text>
-      <text x="${W-P}" y="${H-6}" fill="#6b7382" font-size="10" text-anchor="end">${esc(tl[tl.length-1].date)}</text>
-    </svg>`;
-  } else $('#tl').innerHTML = '<div class="tiny">暂无数据</div>';
-
-  // 地点
-  const mx = Math.max(1, ...pl.map(p=>p.c));
-  $('#pl').innerHTML = pl.length ? pl.map(p=>`<div class="bar">
-      <span class="nm" title="${esc(p.place_name)}">${esc(p.place_name)}</span>
-      <span class="tk"><span class="fl" style="width:${p.c/mx*100}%"></span></span>
-      <span class="vl">${p.c}次/${p.sp}种</span></div>`).join('')
-    : '<div class="tiny">暂无地点数据</div>';
-
-  // 时段
-  const mh = Math.max(1, ...hr);
-  $('#hr').innerHTML = `<div class="hr">${hr.map((v,i)=>
-    `<div style="height:${v/mh*100}%" title="${i}点: ${v} 次"></div>`).join('')}</div>
-    <div class="hrl">${hr.map((v,i)=>`<span>${i%3===0?i:''}</span>`).join('')}</div>`;
-
-  // 迁徙日历
-  const mig = await fetch('/api/migration').then(r=>r.json()).catch(()=>[]);
-  const now = new Date().getMonth() + 1;  // 当前月份 1-12
-  const bySpecies = {};
-  mig.forEach(r=>{
-    if(!bySpecies[r.species_id]) bySpecies[r.species_id] = {name: r.common_name_cn, months: []};
-    bySpecies[r.species_id].months.push({m: r.month, y: r.years, c: r.count});
-  });
-  const html = Object.entries(bySpecies).map(([sid, s])=>{
-    const months = Array(12).fill(0);
-    s.months.forEach(({m,y,c}) => { months[m-1] = c; });
-    const avg = months.filter(x=>x>0).reduce((a,b)=>a+b,0) / Math.max(1, months.filter(x=>x>0).length);
-    const lastSeen = Math.max(...s.months.map(x=>x.m));
-    const overdue = lastSeen < now - 2 && avg > 0;  // 超过 2 个月没出现
-    return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--line)">
-      <div style="width:80px;font-size:12px;${overdue?'color:var(--amber);font-weight:500':''}">${esc(s.name)}${overdue?' 🔥':''}</div>
-      <div style="display:flex;gap:2px;flex:1">${months.map((c,i)=>{
-        const m = i+1;
-        const bg = c===0 ? 'var(--panel2)' : c>=avg ? 'var(--teal)' : '#7cc4ff';
-        const hl = m===now ? 'outline:1.5px solid var(--amber)' : '';
-        return `<div style="flex:1;height:18px;border-radius:3px;background:${bg};${hl}"
-          title="${m}月: ${c} 次${overdue && m===now?'（该出门了）':''}"></div>`;
-      }).join('')}</div>
-      <div style="width:60px;font-size:11px;color:var(--tx3)">${s.months.length} 个月</div>
-    </div>`;
-  }).join('');
-  $('#mig').innerHTML = html || '<div class="tiny">暂无迁徙数据</div>';
-}
-
-// ---------------------------------------------------------------- 扫描
-$('#btnScan').onclick = async ()=>{
-  const lim = $('#lim').value ? '&limit='+$('#lim').value : '';
-  const frc = $('#frc').checked ? '&force=true' : '';
-  $('#scanOut').style.display='block';
-  $('#scanOut').textContent = STATIC_MODE
-    ? '静态模式下不能扫描。请在本地用 bird scan 命令，然后重新导出部署。'
-    : '扫描中…（全库可能需要十几分钟，请不要关闭页面）';
-  if(false){ $('#btnScan').disabled = false; return; }
-  $('#btnScan').disabled = true;
-  try{
-    const r = await fetch('/api/scan?'+ (lim+frc).replace(/^&/,'') , {method:'POST'});
-    const j = await r.json();
-    $('#scanOut').textContent = JSON.stringify(j, null, 2);
-    load();
-  }catch(e){ $('#scanOut').textContent = '失败：'+e; }
-  $('#btnScan').disabled = false;
-};
-
-// ---------------------------------------------------------------- 复核工作流
-// ---------------------------------------------------------------- 推荐清单
-// ---------------------------------------------------------------- 家庭相册
-let CURRENT_ALBUM = null;
-let ALBUMS = [];
-
-async function loadAlbums(){
-  if(!getApiKey()){
-    $('#albumList').innerHTML = '<div class="tiny" style="color:var(--amber)">请先点右上角 🔑 设置 API Key</div>';
-    return;
-  }
-  ALBUMS = await fetch('/api/albums', {headers: apiHeaders()}).then(r=>r.json()).catch(()=>[]);
-  
-  // 渲染相册 tab
-  const tabsHtml = ['<div class="tab on" data-album="all" style="padding:6px 12px;font-size:12px">全部</div>']
-    .concat(ALBUMS.map(a=>`<div class="tab" data-album="${a.id}" style="padding:6px 12px;font-size:12px">${esc(a.name)}</div>`))
-    .join('');
-  $('#albumTabs').innerHTML = tabsHtml;
-  
-  // 绑定 tab 切换
-  $$('#albumTabs .tab').forEach(t=>{
-    t.onclick = ()=>{
-      $$('#albumTabs .tab').forEach(x=>x.classList.remove('on'));
-      t.classList.add('on');
-      const albumId = t.dataset.album;
-      if(albumId === 'all'){
-        loadAllPhotos();
-      } else {
-        openAlbum(parseInt(albumId), ALBUMS.find(a=>a.id==albumId)?.name || '');
-      }
-    };
-  });
-  
-  if(!ALBUMS.length){
-    $('#albumList').innerHTML = '<div class="tiny">还没有相册。创建一个，或点「邀请家人」生成邀请链接。</div>';
-    return;
-  }
-  
-  // 默认显示全部
-  loadAllPhotos();
-}
-
-async function loadAllPhotos(){
-  // 聚合所有相册的照片
-  const allPhotos = [];
-  for(const a of ALBUMS){
-    const photos = await fetch(`/api/albums/${a.id}/photos`, {headers: apiHeaders()}).then(r=>r.json()).catch(()=>[]);
-    allPhotos.push(...photos.map(p=>({...p, album_name: a.name})));
-  }
-  renderPhotos(allPhotos);
-}
-
-function renderPhotos(photos){
-  $('#albumList').innerHTML = photos.map(p=>`
-    <div class="reviewItem" style="cursor:pointer" onclick="window.open('/api/photos/${p.id}')">
-      <img src="/api/photos/${p.id}/thumb" style="width:80px;height:80px;border-radius:8px;object-fit:cover" loading="lazy">
-      <div class="info">
-        <div class="nm">${esc(p.orig_name||'')} <span class="conf">${esc(p.album_name||'')}</span></div>
-        <div class="meta">${esc(p.uploader_name||'')} · ${esc(p.created_at||'').slice(0,10)}</div>
-      </div>
-    </div>`).join('');
-}
-
-async function createAlbum(){
-  const name = $('#newAlbumName').value.trim();
-  if(!name){ alert('请输入相册名'); return; }
-  const r = await fetch('/api/albums', {method:'POST', headers: {...apiHeaders(), 'Content-Type':'application/json'},
-    body: JSON.stringify({name})}).then(r=>r.json());
-  $('#newAlbumName').value = '';
-  loadAlbums();
-}
-
-// 邀请码弹窗
-function showInviteModal(){
-  $('#inviteModal').style.display='block';
-  // 渲染相册勾选（默认全选，包括物种墙）
-  $('#inviteAlbums').innerHTML = ALBUMS.map(a=>`
-    <label style="display:flex;align-items:center;gap:8px;padding:6px 0">
-      <input type="checkbox" value="${a.id}" checked> 
-      <span>${esc(a.name)}</span>
-      ${a.is_default ? '<span class="tiny" style="color:var(--tx3)">（默认相册）</span>' : ''}
-    </label>`).join('');
-  // 添加说明
-  $('#inviteAlbums').insertAdjacentHTML('afterbegin', 
-    '<div class="tiny" style="color:var(--tx3);margin-bottom:8px">家人注册后只能看到你勾选的相册</div>');
-}
-
-function closeInviteModal(){
-  $('#inviteModal').style.display='none';
-  $('#inviteResult').style.display='none';
-}
-
-async function generateInvite(){
-  const checked = Array.from($('#inviteAlbums').querySelectorAll('input:checked')).map(i=>parseInt(i.value));
-  if(!checked.length){ alert('请至少勾选一个相册'); return; }
-  
-  const r = await fetch('/api/invites', {method:'POST', headers: {...apiHeaders(), 'Content-Type':'application/json'},
-    body: JSON.stringify({album_ids: checked, max_uses: 1})}).then(r=>r.json());
-  
-  if(r.code){
-    const link = `${location.origin}/?invite=${r.code}`;
-    $('#inviteLink').textContent = link;
-    $('#inviteResult').style.display='block';
-  } else {
-    alert('生成失败：' + (r.detail || '未知错误'));
-  }
-}
-
-function copyInviteLink(){
-  const link = $('#inviteLink').textContent;
-  navigator.clipboard.writeText(link).then(()=>{
-    alert('链接已复制');
-  });
-}
-
-async function openAlbum(id, name){
-  CURRENT_ALBUM = id;
-  $('#albumDetail').style.display = 'block';
-  $('#albumTitle').textContent = name;
-  const photos = await fetch(`/api/albums/${id}/photos`, {headers: apiHeaders()}).then(r=>r.json()).catch(()=>[]);
-  renderPhotos(photos);
-}
-
-async function uploadToAlbum(){
-  if(!CURRENT_ALBUM){ alert('先选一个相册'); return; }
-  const files = $('#albumFiles').files;
-  if(!files.length){ alert('请选择照片'); return; }
-  const fd = new FormData();
-  for(const f of files) fd.append('files', f);
-  $('#uploadProgress').innerHTML = `<div class="tiny">上传中 ${files.length} 张...</div>`;
-  const r = await fetch(`/api/albums/${CURRENT_ALBUM}/photos`, {method:'POST', headers: apiHeaders(), body: fd}).then(r=>r.json());
-  const ok = r.filter(x=>x.ok).length;
-  const dup = r.filter(x=>x.duplicate).length;
-  $('#uploadProgress').innerHTML = `<div class="tiny" style="color:var(--teal)">上传完成：${ok} 张成功${dup>0?`，${dup} 张重复已跳过`:''}</div>`;
-  setTimeout(()=>openAlbum(CURRENT_ALBUM, $('#albumTitle').textContent), 1000);
-}
-
-async function openAlbum(id, name){
-  CURRENT_ALBUM = id;
-  $('#albumDetail').style.display = 'block';
-  $('#albumTitle').textContent = name;
-  const photos = await fetch(`/api/albums/${id}/photos`, {headers: apiHeaders()}).then(r=>r.json()).catch(()=>[]);
-  $('#albumPhotos').innerHTML = photos.map(p=>`
-    <div style="position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--panel2)">
-      <img src="/api/photos/${p.id}/thumb" style="width:100%;height:100%;object-fit:cover" loading="lazy">
-      <div style="position:absolute;bottom:0;left:0;right:0;padding:4px 6px;font-size:10px;
-        background:linear-gradient(transparent, rgba(0,0,0,.6));color:#fff">
-        ${esc(p.orig_name||'')}
-      </div>
-    </div>`).join('');
-}
-
-async function uploadToAlbum(){
-  if(!CURRENT_ALBUM){ alert('先选一个相册'); return; }
-  const files = $('#albumFiles').files;
-  if(!files.length){ alert('请选择照片'); return; }
-  const fd = new FormData();
-  for(const f of files) fd.append('files', f);
-  $('#uploadProgress').innerHTML = `<div class="tiny">上传中 ${files.length} 张...</div>`;
-  const r = await fetch(`/api/albums/${CURRENT_ALBUM}/photos`, {method:'POST', headers: apiHeaders(), body: fd}).then(r=>r.json());
-  const ok = r.filter(x=>x.ok).length;
-  $('#uploadProgress').innerHTML = `<div class="tiny" style="color:var(--teal)">上传完成：${ok}/${r.length} 张</div>`;
-  setTimeout(()=>openAlbum(CURRENT_ALBUM, $('#albumTitle').textContent), 1000);
-}
-
-async function downloadAlbum(){
-  if(!CURRENT_ALBUM){ alert('先选一个相册'); return; }
-  window.open(`/api/albums/${CURRENT_ALBUM}/download`, '_blank');
-}
-
-async function deleteAlbum(){
-  if(!CURRENT_ALBUM){ alert('先选一个相册'); return; }
-  
-  // 第一次确认
-  const albumName = $('#albumTitle').textContent;
-  if(!confirm(`确认删除相册「${albumName}」？\n\n相册里的照片会被删除，此操作不可恢复。`)) return;
-  
-  // 第二次确认（输入相册名）
-  const input = prompt(`请输入相册名「${albumName}」确认删除：`);
-  if(input !== albumName){
-    alert('相册名不匹配，取消删除');
-    return;
-  }
-  
-  // 执行删除
-  const r = await fetch(`/api/albums/${CURRENT_ALBUM}`, {
-    method: 'DELETE',
-    headers: apiHeaders()
-  }).then(r=>r.json());
-  
-  if(r.ok){
-    alert('相册已删除');
-    CURRENT_ALBUM = null;
-    $('#albumDetail').style.display = 'none';
-    loadAlbums();
-  } else {
-    alert('删除失败：' + (r.detail || '未知错误'));
-  }
-}
-
-async function loadRecommendations(){
-  if(false){
-    $('#recList').innerHTML = '<div class="tiny">静态模式下不能加载推荐。请在本地运行 <code>bird serve</code> 后访问 localhost:8765。</div>';
-    return;
-  }
-  const rec = await fetch('/api/recommendations').then(r=>r.json()).catch(()=>[]);
-  if(!rec.length){
-    $('#recList').innerHTML = '<div class="empty">暂无推荐（社区数据加载失败或你已看过所有鸟种）。</div>';
-    return;
-  }
-  const nameType = $('#recNameType').value;
-  $('#recList').innerHTML = rec.map(r=>{
-    const priority = r.priority === 'high' ? '🔥' : '·';
-    const name = nameType === 'cn' ? r.species
-      : nameType === 'cn_com' ? (r.species || r.species_en)
-      : nameType === 'en' ? r.sciName
-      : r.species_en;
-    return `<div class="reviewItem">
-      <div class="info">
-        <div class="nm">${priority} ${esc(name)} <span class="conf">社区 ${r.community_count} 次</span></div>
-        <div class="meta">${esc(r.sciName||'')} · ${r.locations.map(esc).join('、')}</div>
-        <div class="meta" style="color:var(--tx3)">最近观测：${r.dates.map(esc).join('、')}</div>
-      </div>
-    </div>`;
-  }).join('');
-}
-$('#recNameType').onchange = loadRecommendations;
-
-async function loadReview(){
-  if(false){
-    $('#reviewList').innerHTML = '<div class="tiny">静态模式下不能复核。请在本地运行 <code>bird serve</code> 后访问 localhost:8765。</div>';
-    return;
-  }
-  const items = await fetch('/api/review/suspect?limit=50').then(r=>r.json());
-  if(!items.length){
-    $('#reviewList').innerHTML = '<div class="empty">没有存疑样本了。</div>';
-    return;
-  }
-  $('#reviewList').innerHTML = items.map(it=>{
-    const suspect = it.in_china === 0 ? '⚠️ 不在中国名录' : `置信度 ${(it.confidence*100).toFixed(0)}%`;
-    return `<div class="reviewItem" data-obs="${it.obs_id}">
-      <img src="${imgUrl(it.thumb||it.img)}" onclick="window.open('${imgUrl(it.img)}')" onerror="this.style.display='none'">
-      <div class="info">
-        <div class="nm">${esc(it.common_name_cn)} <span class="conf">${suspect}</span></div>
-        <div class="meta">${esc(it.obs_date)} ${esc(it.obs_time||'')} · ${esc(it.place_name||'（无地点）')} · ${esc(it.identified_by||'')}</div>
-        <div class="acts">
-          <button class="danger" onclick="markNotBird(${it.obs_id}, this)">不是鸟</button>
-          <button onclick="showReassign(${it.obs_id}, this)">分类错误</button>
-          <button onclick="keepSample(${it.obs_id}, this)">保留</button>
-        </div>
-        <div class="reassignBox" style="display:none">
-          <input placeholder="正确的中文名，例如：夜鹭" id="reassign-${it.obs_id}">
-          <button class="primary" onclick="doReassign(${it.obs_id}, this)">确认</button>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-async function markNotBird(obsId, btn){
-  if(!confirm('确认标记「不是鸟」？该观测及其照片将被删除。')) return;
-  btn.disabled = true;
-  const r = await fetch(`/api/review/not-bird?obs_id=${obsId}`, {method:'POST', headers: apiHeaders()}).then(r=>r.json());
-  btn.closest('.reviewItem').style.opacity = '0.3';
-  btn.closest('.reviewItem').querySelector('.meta').innerHTML += ` <span style="color:var(--red)">已删除（${r.deleted_photos} 张照片）</span>`;
-}
-
-function showReassign(obsId, btn){
-  const box = btn.closest('.reviewItem').querySelector('.reassignBox');
-  box.style.display = box.style.display==='none' ? 'flex' : 'none';
-}
-
-async function doReassign(obsId, btn){
-  const input = $(`#reassign-${obsId}`);
-  const name = input.value.trim();
-  if(!name){ alert('请输入正确的中文名'); return; }
-  btn.disabled = true;
-  const r = await fetch(`/api/review/reassign?obs_id=${obsId}&new_species_cn=${encodeURIComponent(name)}`, {method:'POST', headers: apiHeaders()}).then(r=>r.json());
-  btn.closest('.reviewItem').style.opacity = '0.3';
-  btn.closest('.reviewItem').querySelector('.meta').innerHTML += ` <span style="color:var(--teal)">已改到「${esc(name)}」</span>`;
-}
-
-async function keepSample(obsId, btn){
-  btn.closest('.reviewItem').style.opacity = '0.3';
-  btn.closest('.reviewItem').querySelector('.meta').innerHTML += ` <span style="color:var(--tx3)">已保留</span>`;
-}
-
-async function loadQueue(){
-  if(false){
-    $('#qlist').innerHTML = '<div>静态模式下无法查看识别队列。请在本地跑 <code>bird queue</code> 或启动 <code>bird serve</code>。</div>';
-    return;
-  }
-  const q = await fetch('/api/queue').then(r=>r.json());
-  $('#qlist').innerHTML = q.length
-    ? `<div>待识别 <b style="color:var(--amber)">${q.length}</b> 张（最多显示 24）</div>` +
-      q.map(x=>`<div style="margin-top:4px">· ${esc(x.shot_at||'').slice(0,10)}
-        ${esc(x.place_name||'')} <span style="color:var(--tx3)">${esc(x.asset_uuid.slice(0,8))}</span></div>`).join('')
-    : '<div>队列为空。跑一次扫描，或在对话里说「继续识别」。</div>';
-}
-
-// ---------------------------------------------------------------- 地图
-let MAP = null, MAP_LAYER = null, MAP_LOAD_TOKEN = 0;
-
-async function initMap(){
-  if(MAP){ MAP.invalidateSize(); return; }
-  // Leaflet 在 display:none 的容器里初始化会失效，所以必须先显示再初始化
-  MAP = L.map('mapContainer', {zoomControl:true, attributionControl:true, worldCopyJump:true});
-  
-  // 地图瓦片：优先 OSM（免 key），失败 fallback 到百度
-  const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution:'&copy; OpenStreetMap contributors',
-    maxZoom: 19,
-    subdomains: ['a','b','c']
-  });
-  
-  // 尝试加载 OSM，失败则 fallback 到百度
-  osmLayer.on('tileerror', async ()=>{
-    console.warn('OSM 瓦片加载失败，切换到百度地图');
-    MAP.removeLayer(osmLayer);
-    const ak = await fetch('/api/config/baidu-map-ak').then(r=>r.json()).then(j=>j.ak||'').catch(()=>'');
-    L.tileLayer('https://maponline{s}.bdimg.com/tile/?qt=tile&x={x}&y={y}&z={z}&styles=pl&scaler=1&udt=20191119&ak=' + ak, {
-      attribution:'&copy; 百度地图',
-      maxZoom:18, subdomains:['0','1','2','3']
-    }).addTo(MAP);
-  });
-  
-  osmLayer.addTo(MAP);
-  MAP_LAYER = L.layerGroup().addTo(MAP);
-  MAP.on('zoomend moveend', loadMap);
-  MAP.setView([34, 108], 4);
-  setTimeout(()=>{ MAP.invalidateSize(); loadMap(); }, 100);
-}
-
-async function loadMap(){
-  if(!MAP) return;
-  const token = ++MAP_LOAD_TOKEN;
-  const z = Math.max(2, Math.min(9, MAP.getZoom()));
-  const url = `/api/map?zoom=${z}&min_conf=${mc()}`;
-  const pts = await fetch(url).then(r=>r.json()).catch(()=>[]);
-  if(token !== MAP_LOAD_TOKEN) return;   // 过期响应丢弃
-  MAP_LAYER.clearLayers();
-  const maxN = Math.max(1, ...pts.map(p=>p.n));
-  pts.forEach(p=>{
-    const big = p.n >= Math.max(4, maxN*0.4);
-    const size = big? 56 : p.n>1? 46 : 36;
-    // Apple Photos 风格：照片堆叠 + 数量角标
-    const icon = L.divIcon({
-      className:'',
-      html:`<div style="position:relative;width:${size}px;height:${size}px">
-              ${p.thumb?`
-                <img src="${imgUrl(p.thumb)}" style="width:100%;height:100%;border-radius:8px;
-                  object-fit:cover;border:2px solid rgba(255,255,255,.9);
-                  box-shadow:0 2px 8px rgba(0,0,0,.4)">
-                ${p.n>1?`<div style="position:absolute;top:-4px;right:-4px;width:20px;height:20px;
-                  border-radius:50%;background:var(--teal);color:#fff;font:600 11px/20px system-ui;
-                  text-align:center;border:2px solid #14161a">${p.n}</div>`:''}
-              `:`<div style="width:100%;height:100%;border-radius:50%;background:var(--teal);
-                  display:flex;align-items:center;justify-content:center;color:#fff;
-                  font:600 12px system-ui;border:2px solid rgba(255,255,255,.9)">${p.n}</div>`}
-            </div>`,
-      iconSize:[size,size], iconAnchor:[size/2,size/2]
-    });
-    const m = L.marker([p.lat,p.lon], {icon}).addTo(MAP_LAYER);
-    m.on('click', ()=>openCell(p, z));
-  });
-  if(!MAP._fit_done && pts.length){
-    MAP._fit_done = true;
-    MAP.fitBounds(L.latLngBounds(pts.map(p=>[p.lat,p.lon])).pad(0.25), {animate:false});
-  }
-}
-
-async function openCell(p, z){
-  const panel = $('#cellPanel');
-  panel.style.display='block';
-  panel.innerHTML = `<h3>${esc(p.top_species||'观测点')} <span class="close" onclick="$('#cellPanel').style.display='none'">&times;</span></h3>
-    <div class="m">${p.n} 次观测 · ${p.sp} 种 · 最近 ${esc((p.last_date||'').slice(0,10))}</div>
-    <div class="tiny">加载中…</div>`;
-  const cellKey = `${p.lat.toFixed(4)}-${p.lon.toFixed(4)}`;
-  const cellUrl = STATIC_MODE ? `./api/cell-${cellKey}.json`
-    : `/api/map/cell?lat=${p.lat}&lon=${p.lon}&zoom=${z+2}&min_conf=${mc()}`;
-  const items = await fetch(cellUrl).then(r=>r.json()).catch(()=>[]);
-  if(!items.length){
-    panel.querySelector('.tiny').textContent = '该网格内没有更多记录';
-    return;
-  }
-  panel.innerHTML = `<h3>${esc(p.top_species||'观测点')} <span class="close" onclick="$('#cellPanel').style.display='none'">&times;</span></h3>
-    <div class="m">${p.n} 次观测 · ${p.sp} 种</div>`
-    + items.map(c=>`<div class="cellItem" onclick="openSpecies(${c.species_id})">
-      ${c.thumb?`<img src="${imgUrl(c.thumb)}">`:`<div style="width:52px;height:52px;border-radius:7px;background:var(--panel2)"></div>`}
-      <div><div class="t">${esc(c.common_name_cn)}</div>
-        <div class="m">${esc(c.obs_date)} · ${(c.confidence*100).toFixed(0)}%${c.place_name?' · '+esc(c.place_name.split(',')[0]):''}</div></div>
-    </div>`).join('');
-}
-
-function showKeyModal(){
-  $('#keyModal').style.display='block';
-  $('#apiKeyInput').value = getApiKey();
-}
-function closeKeyModal(){ $('#keyModal').style.display='none'; }
-function saveApiKey(){
-  setApiKey($('#apiKeyInput').value);
-  closeKeyModal();
-  alert('API Key 已保存');
-}
-
-function closeAdd(){
-  $('#addModal').style.display='none';
-  $('#addFile').value=''; $('#addTime').value=''; $('#addPlace').value='';
-  $('#addResult').style.display='none';
-}
-
-async function doAdd(){
-  const f = $('#addFile').files[0];
-  if(!f){ showAdd('请先选择文件', false); return; }
-  if(false){
-    showAdd('静态模式下不能上传。请在本地运行 bird serve 后访问 localhost:8765', false);
-    return;
-  }
-  const btn = $('#addGo');
-  btn.disabled = true; btn.textContent = '识别中…';
-  const fd = new FormData();
-  fd.append('file', f);
-  fd.append('taken_at', $('#addTime').value.replace('T',' '));
-  fd.append('place_name', $('#addPlace').value);
-  try{
-    const r = await fetch('/api/upload', {method:'POST', body:fd, headers: apiHeaders()});
-    const j = await r.json();
-    if(!j.ok){ showAdd('识别失败：'+(j.error||'未知'), false); btn.disabled=false; btn.textContent='上传并识别'; return; }
-    const isNew = j.is_new ? '新鸟种！' : '老朋友，';
-    showAdd(`✓ ${isNew}识别为「${j.common_name_cn}」（${j.confidence}%），累计 ${j.total_obs} 次观测`, true);
-    btn.textContent='完成';
-    setTimeout(()=>{ closeAdd(); load(); }, 1200);
-  }catch(e){
-    showAdd('请求失败：'+e, false);
-    btn.disabled=false; btn.textContent='上传并识别';
-  }
-}
-function showAdd(msg, ok){
-  const el = $('#addResult');
-  el.textContent = msg;
-  el.className = ok ? 'ok' : 'err';
-  el.style.display = 'block';
-}
-
-// ---------------------------------------------------------------- 事件
-document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
-  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
-  t.classList.add('on');
-  const v = t.dataset.t;
-  ['wall','map','viz','rec','albums','review','run'].forEach(k=>$('#'+k).style.display = k===v?'block':'none');
-  if(v==='map'){ initMap(); setTimeout(()=>MAP&&MAP.invalidateSize(), 60); }
-  if(v==='viz') loadViz();
-  if(v==='rec') loadRecommendations();
-  if(v==='albums') loadAlbums();
-  if(v==='review') loadReview();
-  if(v==='run') loadQueue();
-});
-let tm; $('#q').oninput = ()=>{ clearTimeout(tm); tm=setTimeout(load, 250); };
-$('#ord').onchange = load;
-$('#mc').onchange = ()=>{ load(); if($('#viz').style.display!=='none') loadViz();
-  if(MAP){ MAP._fit_done=false; loadMap(); } };
-
-load();
-
-// PWA：注册 service worker
-if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('/sw.js').catch(()=>{});
-}
-
-// 邀请链接处理：?invite=xxx
-const inviteMatch = location.search.match(/invite=([a-f0-9]+)/);
-if(inviteMatch){
-  const name = prompt('输入你的名字（例如：妈妈）');
-  if(name){
-    fetch('/api/auth/register', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({invite_code: inviteMatch[1], display_name: name})})
-    .then(r=>r.json())
-    .then(j=>{
-      if(j.api_key){
-        setApiKey(j.api_key);
-        alert(`注册成功！你的 API Key 已保存。\n\n请把下面这个 key 记下来（只显示一次）：\n${j.api_key}`);
-        history.replaceState({}, '', '/');
-      } else {
-        alert('注册失败：' + (j.detail || '未知错误'));
-      }
-    });
-  }
-}
-</script>
-
-<!-- 手机端底部导航（Instagram 风格） -->
-<nav class="bottomNav" style="display:none" id="bottomNav">
-  <a href="#" data-tab="wall" class="on">
-    <span class="icon">🏠</span>
-    <span>首页</span>
-  </a>
-  <a href="#" data-tab="map">
-    <span class="icon">🗺️</span>
-    <span>地图</span>
-  </a>
-  <a href="#" data-tab="albums">
-    <span class="icon">📷</span>
-    <span>相册</span>
-  </a>
-  <a href="#" data-tab="review">
-    <span class="icon">✓</span>
-    <span>复核</span>
-  </a>
+<nav class="bottomNav" id="bottomNav">
+  <a href="#" data-tab="wall" class="on"><span class="icon">🏠</span><span>首页</span></a>
+  <a href="#" data-tab="map"><span class="icon">🗺️</span><span>地图</span></a>
+  <a href="#" data-tab="albums"><span class="icon">📷</span><span>相册</span></a>
+  <a href="#" data-tab="review"><span class="icon">✓</span><span>复核</span></a>
 </nav>
 
-<script>
-// 手机端检测 + 底部导航
-if(window.innerWidth <= 768){
-  $('#bottomNav').style.display = 'flex';
-  
-  // 底部导航点击
-  $$('.bottomNav a').forEach(a=>{
-    a.onclick = (e)=>{
-      e.preventDefault();
-      $$('.bottomNav a').forEach(x=>x.classList.remove('on'));
-      a.classList.add('on');
-      const tab = a.dataset.tab;
-      // 触发对应的 tab 切换
-      const tabEl = document.querySelector(`[data-t="${tab}"]`);
-      if(tabEl) tabEl.click();
-    };
-  });
-}
-</script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="/static/js/ui.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/wall.js"></script>
+<script src="/static/js/map.js"></script>
+<script src="/static/js/viz.js"></script>
+<script src="/static/js/rec.js"></script>
+<script src="/static/js/albums.js"></script>
+<script src="/static/js/review.js"></script>
+<script src="/static/js/run.js"></script>
+<script src="/static/js/app.js"></script>
 </body>
 </html>

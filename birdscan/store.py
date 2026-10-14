@@ -166,6 +166,45 @@ def _migrate(con) -> None:
                     con.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
                 except Exception as e:
                     log.debug("迁移 %s.%s 失败: %s", table, name, e)
+    _migrate_observations_owner(con)
+
+
+def _migrate_observations_owner(con) -> None:
+    """路线 C：observations 增加 owner_id（数据归属用户）。
+
+    - 老库补列 + 建索引；
+    - 存量观测回填为 owner（个人库时代的数据都是所有者的）；
+    - users 表尚未创建时（fresh DB，无存量数据）跳过回填。
+    幂等：重复执行不报错、不改数据。
+    """
+    have = {r["name"] for r in con.execute("PRAGMA table_info(observations)")}
+    if "owner_id" not in have:
+        con.execute("ALTER TABLE observations ADD COLUMN owner_id INTEGER")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_obs_owner ON observations(owner_id)")
+    try:
+        owner = con.execute(
+            "SELECT id FROM users WHERE role='owner'").fetchone()
+    except sqlite3.OperationalError:
+        return  # users 表未创建（sharing 未初始化），无存量可回填
+    if owner:
+        con.execute("UPDATE observations SET owner_id=? WHERE owner_id IS NULL",
+                    (owner["id"],))
+
+
+def _owner_clause(alias: str, owner_ids: list[int] | None, args: list) -> str:
+    """生成 owner 过滤 SQL 片段并追加参数。
+
+    owner_ids=None  -> 不过滤（所有者视角/CLI）；
+    []              -> 谁的数据都看不到；
+    [ids...]        -> AND alias.owner_id IN (...)。
+    """
+    if owner_ids is None:
+        return ""
+    if not owner_ids:
+        return " AND 1=0"
+    ph = ",".join("?" * len(owner_ids))
+    args.extend(owner_ids)
+    return f" AND {alias}.owner_id IN ({ph})"
 
 
 def now_iso() -> str:
@@ -230,16 +269,19 @@ def add_observation(
     confidence: float | None,
     identified_by: str,
     notes: str | None,
+    owner_id: int | None = None,
 ) -> int:
     with conn_ctx() as con:
         cur = con.execute(
             """INSERT INTO observations
                (species_id, obs_date, obs_time, latitude, longitude, place_name,
-                place_source, admin_region, confidence, identified_by, notes, created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                place_source, admin_region, confidence, identified_by, notes,
+                owner_id, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 species_id, obs_date, obs_time, latitude, longitude, place_name,
-                place_source, admin_region, confidence, identified_by, notes, now_iso(),
+                place_source, admin_region, confidence, identified_by, notes,
+                owner_id, now_iso(),
             ),
         )
         return cur.lastrowid
@@ -248,8 +290,9 @@ def add_observation(
 def find_observation(
     species_id: int, obs_date: str, place_name: str | None,
     latitude: float | None, longitude: float | None,
+    owner_id: int | None = None,
 ) -> int | None:
-    """同鸟种 + 同日期 + 同地点簇 -> 视为同一次观测。
+    """同鸟种 + 同日期 + 同地点簇 -> 视为同一次观测（按用户隔离，路线 C）。
 
     实测教训：62% 的鸟照没有地名（相机长焦头无 GPS），
     早期版本要求地点精确相等，导致同日同物种的连拍被拆成多条
@@ -260,11 +303,13 @@ def find_observation(
       观鸟场景下一天一地一物种 = 一次记录，符合直觉。
     """
     from . import geo
+    args: list = [species_id, obs_date]
+    scope = _owner_clause("o", None if owner_id is None else [owner_id], args)
     with conn_ctx(readonly=True) as con:
         rows = con.execute(
-            "SELECT id, place_name, latitude, longitude FROM observations "
-            "WHERE species_id = ? AND obs_date = ?",
-            (species_id, obs_date),
+            "SELECT id, place_name, latitude, longitude FROM observations o "
+            "WHERE o.species_id = ? AND o.obs_date = ?" + scope,
+            args,
         ).fetchall()
     for r in rows:
         if place_name and r["place_name"]:
@@ -376,46 +421,45 @@ def finish_run(run_id: int, **stats) -> None:
 
 
 # ----------------------------------------------------------------- 查询
-def get_stats(min_conf: float | None = None) -> dict:
+def get_stats(min_conf: float | None = None,
+              owner_ids: list[int] | None = None) -> dict:
     mc = min_conf if min_conf is not None else config.UI_MIN_CONF
-    ok = f"confidence >= ? AND NOT {SUSPECT_SQL.replace('o.', '')}"
+    op = list(owner_ids) if owner_ids else []   # 每次查询取一份新鲜参数
+
+    def _q(con, sql, extra=()):
+        """执行带 owner 过滤的查询：SQL 里的 {OC} 占位符替换为过滤片段。"""
+        args = list(extra) + op
+        return con.execute(sql.replace("{OC}", _owner_clause("o", owner_ids, [])),
+                           args).fetchone()
+
     with conn_ctx(readonly=True) as con:
         species = con.execute("SELECT COUNT(*) c FROM species").fetchone()["c"]
-        obs = con.execute("SELECT COUNT(*) c FROM observations").fetchone()["c"]
-        photos = con.execute("SELECT COUNT(*) c FROM photos").fetchone()["c"]
-        places = con.execute(
-            "SELECT COUNT(DISTINCT place_name) c FROM observations WHERE place_name IS NOT NULL"
-        ).fetchone()["c"]
+        obs = _q(con, "SELECT COUNT(*) c FROM observations o WHERE 1=1{OC}")["c"]
+        photos = _q(con, "SELECT COUNT(*) c FROM photos p "
+                         "JOIN observations o ON o.id = p.obs_id WHERE 1=1{OC}")["c"]
+        places = _q(con, "SELECT COUNT(DISTINCT place_name) c FROM observations o "
+                         "WHERE place_name IS NOT NULL{OC}")["c"]
         pending = con.execute(
             "SELECT COUNT(*) c FROM id_queue WHERE status='pending'"
         ).fetchone()["c"]
         # 可信口径：高置信 且 非「中国名录外+低置信」的可疑项
-        row = con.execute(
-            f"""SELECT COUNT(DISTINCT o.species_id) sp, COUNT(*) ob,
+        row = _q(con, f"""SELECT COUNT(DISTINCT o.species_id) sp, COUNT(*) ob,
                        COUNT(DISTINCT o.place_name) pl
                 FROM observations o JOIN species s ON s.id = o.species_id
-                WHERE o.confidence >= ? AND NOT {SUSPECT_SQL}""", (mc,)
-        ).fetchone()
-        low = con.execute(
-            f"""SELECT COUNT(*) c FROM observations o JOIN species s ON s.id=o.species_id
-                WHERE o.confidence < ? OR {SUSPECT_SQL}""", (mc,)
-        ).fetchone()["c"]
+                WHERE o.confidence >= ? AND NOT {SUSPECT_SQL}{{OC}}""", (mc,))
+        low = _q(con, f"""SELECT COUNT(*) c FROM observations o JOIN species s ON s.id=o.species_id
+                WHERE o.confidence < ? OR {SUSPECT_SQL}{{OC}}""", (mc,))["c"]
         checklist = con.execute(
             "SELECT COUNT(*) c FROM species WHERE in_china = 1").fetchone()["c"]
-        total_cn = con.execute(
-            "SELECT COUNT(*) c FROM species WHERE in_china = 1").fetchone()["c"]
-        protected = con.execute(
-            """SELECT COUNT(DISTINCT o.species_id) c FROM observations o
+        protected = _q(con, """SELECT COUNT(DISTINCT o.species_id) c FROM observations o
                JOIN species s ON s.id=o.species_id
                WHERE s.china_protection IS NOT NULL AND s.china_protection != ''
-                 AND o.confidence >= ?""", (mc,)).fetchone()["c"]
+                 AND o.confidence >= ?{OC}""", (mc,))["c"]
         this_year = datetime.now(config.LOCAL_TZ).strftime("%Y-")
-        new_species_ytd = con.execute(
-            "SELECT COUNT(DISTINCT species_id) c FROM observations "
-            "WHERE obs_date >= (SELECT MIN(obs_date) FROM observations WHERE obs_date LIKE ?) "
-            "AND obs_date LIKE ?",
-            (this_year + "%", this_year + "%"),
-        ).fetchone()["c"]
+        new_species_ytd = _q(con, """
+            SELECT COUNT(DISTINCT species_id) c FROM observations o
+            WHERE obs_date >= (SELECT MIN(obs_date) FROM observations WHERE obs_date LIKE ?)
+            AND obs_date LIKE ?{OC}""", (this_year + "%", this_year + "%"))["c"]
         last = con.execute(
             "SELECT started_at, status, new_assets, l1_passed, l2_kept FROM scan_runs "
             "ORDER BY id DESC LIMIT 1"
@@ -444,14 +488,15 @@ SUSPECT_SQL = "(s.in_china = 0 AND o.confidence < 0.45)"
 def get_species_list(order: str = "count", limit: int = 200, search: str = "",
                      min_conf: float | None = None,
                      exclude_suspect: bool = True,
-                     only_suspect: bool = False) -> list[dict]:
+                     only_suspect: bool = False,
+                     owner_ids: list[int] | None = None) -> list[dict]:
     mc = min_conf if min_conf is not None else config.UI_MIN_CONF
     order_sql = {
         "count": "cnt DESC, last_date DESC",
         "recent": "last_date DESC, cnt DESC",
         "name": "s.common_name_cn COLLATE NOCASE",
     }.get(order, "cnt DESC, last_date DESC")
-    args = [mc]
+    args: list = [mc]
     where = "WHERE o.confidence >= ?"
     if exclude_suspect and not only_suspect:
         where += f" AND NOT {SUSPECT_SQL}"
@@ -461,6 +506,12 @@ def get_species_list(order: str = "count", limit: int = 200, search: str = "",
         where += (" AND (s.common_name_cn LIKE ? OR s.scientific_name LIKE ? "
                   "OR s.common_name_en LIKE ? OR s.family_cn LIKE ?)")
         args += [f"%{search}%"] * 4
+    # owner 过滤：主查询 + 3 个子查询（top_place/thumb/img）同步生效
+    oc_main = _owner_clause("o", owner_ids, [])
+    oc_place = _owner_clause("o4", owner_ids, [])
+    oc_thumb = _owner_clause("o2", owner_ids, [])
+    oc_img = _owner_clause("o3", owner_ids, [])
+    op = list(owner_ids) if owner_ids else []
     sql = f"""
       SELECT s.id, s.common_name_cn, s.scientific_name, s.common_name_en, s.family_cn,
              COUNT(o.id) AS cnt,
@@ -469,27 +520,30 @@ def get_species_list(order: str = "count", limit: int = 200, search: str = "",
              MAX(o.obs_date) AS last_date,
              (SELECT o4.place_name FROM observations o4
                 WHERE o4.species_id = s.id AND o4.place_name IS NOT NULL
-                  AND o4.confidence >= ?
+                  AND o4.confidence >= ?{oc_place}
                 GROUP BY o4.place_name ORDER BY COUNT(*) DESC LIMIT 1) AS top_place,
              (SELECT p.thumb_cache FROM photos p
                 WHERE p.obs_id = (SELECT o2.id FROM observations o2
-                                  WHERE o2.species_id = s.id AND o2.confidence >= ?
+                                  WHERE o2.species_id = s.id AND o2.confidence >= ?{oc_thumb}
                                   ORDER BY o2.obs_date DESC LIMIT 1)
                   AND p.thumb_cache IS NOT NULL LIMIT 1) AS thumb,
              (SELECT p2.image_path FROM photos p2
                 WHERE p2.obs_id = (SELECT o3.id FROM observations o3
-                                   WHERE o3.species_id = s.id AND o3.confidence >= ?
+                                   WHERE o3.species_id = s.id AND o3.confidence >= ?{oc_img}
                                    ORDER BY o3.obs_date DESC LIMIT 1)
                   AND p2.image_path IS NOT NULL
                 ORDER BY p2.is_representative DESC, p2.sharpness DESC LIMIT 1) AS img
       FROM species s JOIN observations o ON o.species_id = s.id
-      {where}
+      {where}{oc_main}
       GROUP BY s.id
       ORDER BY {order_sql}
       LIMIT ?
     """
     with conn_ctx(readonly=True) as con:
-        rows = [dict(r) for r in con.execute(sql, args + [mc, mc, mc, limit]).fetchall()]
+        # 参数顺序：主 WHERE 参数（含 owner）→ 每个子查询的 [mc + owner] → LIMIT
+        sub = [mc] + op
+        rows = [dict(r) for r in con.execute(
+            sql, args + op + sub * 3 + [limit]).fetchall()]
     # 把绝对路径替换为相对路径（thumbs/xxx.jpg），前端才能加载
     for r in rows:
         for k in ("thumb", "img"):
@@ -499,14 +553,18 @@ def get_species_list(order: str = "count", limit: int = 200, search: str = "",
     return rows
 
 
-def get_species_detail(species_id: int) -> dict | None:
+def get_species_detail(species_id: int,
+                       owner_ids: list[int] | None = None) -> dict | None:
+    op = list(owner_ids) if owner_ids else []
+    oc = _owner_clause("o", owner_ids, [])
     with conn_ctx(readonly=True) as con:
         sp = con.execute("SELECT * FROM species WHERE id = ?", (species_id,)).fetchone()
         if not sp:
             return None
         obs = con.execute(
-            "SELECT * FROM observations WHERE species_id = ? ORDER BY obs_date DESC",
-            (species_id,),
+            "SELECT * FROM observations o WHERE o.species_id = ?" + oc +
+            " ORDER BY o.obs_date DESC",
+            [species_id] + op,
         ).fetchall()
         out_obs = []
         for o in obs:
@@ -563,36 +621,48 @@ def get_species_detail_by_name(name: str) -> dict | None:
     return None
 
 
-def get_calendar(year: int, min_conf: float | None = None) -> list[dict]:
+def get_calendar(year: int, min_conf: float | None = None,
+                 owner_ids: list[int] | None = None) -> list[dict]:
     mc = min_conf if min_conf is not None else config.UI_MIN_CONF
+    op = list(owner_ids) if owner_ids else []
+    oc = _owner_clause("o", owner_ids, [])
     with conn_ctx(readonly=True) as con:
         rows = con.execute(
-            "SELECT obs_date, COUNT(*) c FROM observations "
-            "WHERE obs_date LIKE ? AND confidence >= ? GROUP BY obs_date",
-            (f"{year}-%", mc),
+            "SELECT obs_date, COUNT(*) c FROM observations o "
+            "WHERE o.obs_date LIKE ? AND o.confidence >= ?" + oc +
+            " GROUP BY o.obs_date",
+            [f"{year}-%", mc] + op,
         ).fetchall()
     return [{"date": r["obs_date"], "count": r["c"]} for r in rows]
 
 
-def get_places(limit: int = 15, min_conf: float | None = None) -> list[dict]:
+def get_places(limit: int = 15, min_conf: float | None = None,
+               owner_ids: list[int] | None = None) -> list[dict]:
     mc = min_conf if min_conf is not None else config.UI_MIN_CONF
+    op = list(owner_ids) if owner_ids else []
+    oc = _owner_clause("o", owner_ids, [])
     with conn_ctx(readonly=True) as con:
         rows = con.execute(
             "SELECT place_name, COUNT(*) c, COUNT(DISTINCT species_id) sp "
-            "FROM observations WHERE place_name IS NOT NULL AND confidence >= ? "
-            "GROUP BY place_name ORDER BY c DESC LIMIT ?",
-            (mc, limit),
+            "FROM observations o WHERE place_name IS NOT NULL AND confidence >= ?"
+            + oc +
+            " GROUP BY place_name ORDER BY c DESC LIMIT ?",
+            [mc] + op + [limit],
         ).fetchall()
     return [dict(r) for r in rows]
 
 
-def get_timeline(min_conf: float | None = None) -> list[dict]:
+def get_timeline(min_conf: float | None = None,
+                 owner_ids: list[int] | None = None) -> list[dict]:
     """按首次观测日期累积的种数增长曲线。"""
     mc = min_conf if min_conf is not None else config.UI_MIN_CONF
+    op = list(owner_ids) if owner_ids else []
+    oc = _owner_clause("o", owner_ids, [])
     with conn_ctx(readonly=True) as con:
         rows = con.execute(
-            "SELECT species_id, MIN(obs_date) d FROM observations "
-            "WHERE confidence >= ? GROUP BY species_id ORDER BY d", (mc,)
+            "SELECT species_id, MIN(obs_date) d FROM observations o "
+            "WHERE o.confidence >= ?" + oc + " GROUP BY species_id ORDER BY d",
+            [mc] + op,
         ).fetchall()
     out, seen, n = [], set(), 0
     for r in rows:
@@ -608,7 +678,8 @@ def get_map_points(zoom: int = 3, min_conf: float | None = None,
                    exclude_suspect: bool = True,
                    sw_lat: float | None = None, sw_lon: float | None = None,
                    ne_lat: float | None = None, ne_lon: float | None = None,
-                   cell_div: int = 4) -> list[dict]:
+                   cell_div: int = 4,
+                   owner_ids: list[int] | None = None) -> list[dict]:
     """按缩放级别做网格聚类，供前端地图渲染。
 
     cell_div 控制聚合粒度：网格边长 = 180 / 2^zoom / cell_div 度。
@@ -625,13 +696,17 @@ def get_map_points(zoom: int = 3, min_conf: float | None = None,
     if None not in (sw_lat, sw_lon, ne_lat, ne_lon):
         where += " AND o.latitude BETWEEN ? AND ? AND o.longitude BETWEEN ? AND ?"
         args += [sw_lat, ne_lat, sw_lon, ne_lon]
+    op = list(owner_ids) if owner_ids else []
+    oc_main = _owner_clause("o", owner_ids, [])
+    oc_thumb = _owner_clause("o2", owner_ids, [])
+    oc_top = _owner_clause("o3", owner_ids, [])
     sql = f"""
       SELECT CAST(o.latitude / ? AS INT) gx, CAST(o.longitude / ? AS INT) gy,
              COUNT(*) n, COUNT(DISTINCT o.species_id) sp,
              AVG(o.latitude) lat, AVG(o.longitude) lon,
              MAX(o.obs_date) last_date,
              (SELECT p.thumb_cache FROM observations o2 JOIN photos p ON p.obs_id = o2.id
-                WHERE o2.latitude IS NOT NULL AND o2.confidence >= ?
+                WHERE o2.latitude IS NOT NULL AND o2.confidence >= ?{oc_thumb}
                   AND CAST(o2.latitude / ? AS INT) = CAST(o.latitude / ? AS INT)
                   AND CAST(o2.longitude / ? AS INT) = CAST(o.longitude / ? AS INT)
                   AND p.thumb_cache IS NOT NULL
@@ -640,20 +715,21 @@ def get_map_points(zoom: int = 3, min_conf: float | None = None,
                 JOIN species s2 ON s2.id = o3.species_id
                 WHERE CAST(o3.latitude / ? AS INT) = CAST(o.latitude / ? AS INT)
                   AND CAST(o3.longitude / ? AS INT) = CAST(o.longitude / ? AS INT)
-                  AND o3.confidence >= ?
+                  AND o3.confidence >= ?{oc_top}
                   {'AND NOT ' + suspect_o3 if exclude_suspect else ''}
                 GROUP BY s2.id ORDER BY COUNT(*) DESC LIMIT 1) top_species
       FROM observations o JOIN species s ON s.id = o.species_id
-      {where}
+      {where}{oc_main}
       GROUP BY gx, gy
       ORDER BY n DESC
     """
     params = ([cell, cell]            # gx, gy
-              + [mc]                  # thumb 子查询 conf
+              + [mc] + op             # thumb 子查询 conf + owner
               + [cell] * 4            # thumb 子查询 lat/lon 网格
               + [cell] * 4            # top_species 子查询 lat/lon 网格
-              + [mc]                  # top_species 子查询 conf
-              + args)                 # WHERE 的 mc（+ 可选视口）
+              + [mc] + op             # top_species 子查询 conf + owner
+              + args                  # WHERE 的 mc（+ 可选视口）
+              + op)                   # WHERE 的 owner
     with conn_ctx(readonly=True) as con:
         rows = [dict(r) for r in con.execute(sql, params).fetchall()]
     # 把绝对路径替换为相对路径
@@ -666,11 +742,14 @@ def get_map_points(zoom: int = 3, min_conf: float | None = None,
 
 def get_observations_at(lat: float, lon: float, cell_div: int = 4,
                         zoom: int = 12, min_conf: float | None = None,
-                        exclude_suspect: bool = True) -> list[dict]:
+                        exclude_suspect: bool = True,
+                        owner_ids: list[int] | None = None) -> list[dict]:
     """点开地图上的一个簇，返回该网格内的观测明细。"""
     mc = min_conf if min_conf is not None else config.UI_MIN_CONF
     cell = 180.0 / (2 ** max(0, zoom)) / max(1, cell_div)
     gx, gy = int(lat / cell), int(lon / cell)
+    op = list(owner_ids) if owner_ids else []
+    oc = _owner_clause("o", owner_ids, [])
     sql = f"""
       SELECT o.id, o.obs_date, o.obs_time, o.place_name, o.confidence,
              s.id species_id, s.common_name_cn, s.scientific_name,
@@ -681,20 +760,25 @@ def get_observations_at(lat: float, lon: float, cell_div: int = 4,
       FROM observations o JOIN species s ON s.id = o.species_id
       WHERE o.latitude IS NOT NULL AND o.longitude IS NOT NULL
         AND CAST(o.latitude / ? AS INT) = ? AND CAST(o.longitude / ? AS INT) = ?
-        AND o.confidence >= ?
+        AND o.confidence >= ?{oc}
         {'AND NOT ' + SUSPECT_SQL if exclude_suspect else ''}
       ORDER BY o.obs_date DESC LIMIT 60
     """
     with conn_ctx(readonly=True) as con:
-        return [dict(r) for r in con.execute(sql, (cell, gx, cell, gy, mc)).fetchall()]
+        return [dict(r) for r in con.execute(
+            sql, (cell, gx, cell, gy, mc) + tuple(op)).fetchall()]
 
 
-def get_hour_dist(min_conf: float | None = None) -> list[int]:
+def get_hour_dist(min_conf: float | None = None,
+                  owner_ids: list[int] | None = None) -> list[int]:
     mc = min_conf if min_conf is not None else config.UI_MIN_CONF
+    op = list(owner_ids) if owner_ids else []
+    oc = _owner_clause("o", owner_ids, [])
     with conn_ctx(readonly=True) as con:
         rows = con.execute(
-            "SELECT obs_time FROM observations "
-            "WHERE obs_time IS NOT NULL AND confidence >= ?", (mc,)
+            "SELECT obs_time FROM observations o "
+            "WHERE o.obs_time IS NOT NULL AND o.confidence >= ?" + oc,
+            [mc] + op,
         ).fetchall()
     buckets = [0] * 24
     for r in rows:
@@ -799,9 +883,12 @@ def delete_observation(obs_id: int) -> dict:
 
 
 # ----------------------------------------------------------------- 复核工作流
-def get_suspect_samples(limit: int = 100) -> list[dict]:
+def get_suspect_samples(limit: int = 100,
+                        owner_ids: list[int] | None = None) -> list[dict]:
     """取存疑样本：低置信度 或 不在中国名录的观测。
     供「不是我的鸟？」复核页展示。"""
+    op = list(owner_ids) if owner_ids else []
+    oc = _owner_clause("o", owner_ids, [])
     sql = f"""
       SELECT o.id obs_id, o.obs_date, o.obs_time, o.place_name, o.confidence,
              o.identified_by, o.notes,
@@ -814,12 +901,12 @@ def get_suspect_samples(limit: int = 100) -> list[dict]:
              (SELECT p3.image_path FROM photos p3 WHERE p3.obs_id = o.id
                 ORDER BY p3.is_representative DESC, p3.sharpness DESC LIMIT 1) img
       FROM observations o JOIN species s ON s.id = o.species_id
-      WHERE o.confidence < 0.45 OR s.in_china = 0
+      WHERE o.confidence < 0.45 OR s.in_china = 0{oc}
       ORDER BY o.confidence ASC, o.obs_date DESC
       LIMIT ?
     """
     with conn_ctx(readonly=True) as con:
-        rows = [dict(r) for r in con.execute(sql, (limit,)).fetchall()]
+        rows = [dict(r) for r in con.execute(sql, op + [limit]).fetchall()]
     # 把绝对路径替换为相对路径，前端才能加载
     for r in rows:
         for k in ("thumb", "img"):
@@ -865,7 +952,8 @@ def reassign_species(obs_id: int, new_species_cn: str) -> dict:
 
 # ----------------------------------------------------------------- 迁徙日历
 def get_species_monthly_pattern(species_id: int | None = None,
-                                min_conf: float | None = None) -> list[dict]:
+                                min_conf: float | None = None,
+                                owner_ids: list[int] | None = None) -> list[dict]:
     """按物种聚合历年观测的月份分布，用于迁徙日历。
 
     返回 [{"species_id":1,"common_name_cn":"夜鹭","month":6,"years":3,"count":5}, ...]
@@ -876,13 +964,14 @@ def get_species_monthly_pattern(species_id: int | None = None,
     if species_id:
         where += " AND o.species_id = ?"
         args.append(species_id)
+    args += list(owner_ids) if owner_ids else []
     sql = f"""
       SELECT o.species_id, s.common_name_cn, s.family_cn,
              CAST(substr(o.obs_date, 6, 2) AS INT) month,
              COUNT(DISTINCT substr(o.obs_date, 1, 4)) years,
              COUNT(*) count
       FROM observations o JOIN species s ON s.id = o.species_id
-      {where}
+      {where}{_owner_clause("o", owner_ids, [])}
       GROUP BY o.species_id, month
       ORDER BY s.common_name_cn, month
     """
@@ -890,13 +979,17 @@ def get_species_monthly_pattern(species_id: int | None = None,
         return [dict(r) for r in con.execute(sql, args).fetchall()]
 
 
-def get_first_seen_map(min_conf: float | None = None) -> list[dict]:
+def get_first_seen_map(min_conf: float | None = None,
+                       owner_ids: list[int] | None = None) -> list[dict]:
     """每个物种的首次观测地点，用于「加新地图」。
 
     返回 [{"species_id":1,"common_name_cn":"夜鹭","first_date":"2025-07-03",
             "lat":22.49,"lon":113.95,"thumb":"..."}, ...]
     """
     mc = min_conf if min_conf is not None else config.UI_MIN_CONF
+    op = list(owner_ids) if owner_ids else []
+    oc_inner = _owner_clause("o", owner_ids, [])
+    oc_outer = _owner_clause("o", owner_ids, [])
     sql = f"""
       SELECT s.id species_id, s.common_name_cn, s.family_cn,
              o.obs_date first_date, o.latitude lat, o.longitude lon,
@@ -904,47 +997,52 @@ def get_first_seen_map(min_conf: float | None = None) -> list[dict]:
                 AND p.thumb_cache IS NOT NULL LIMIT 1) thumb
       FROM species s
       JOIN (
-        SELECT species_id, MIN(obs_date) first_date FROM observations
-        WHERE confidence >= ? GROUP BY species_id
+        SELECT species_id, MIN(obs_date) first_date FROM observations o
+        WHERE o.confidence >= ?{oc_inner} GROUP BY species_id
       ) first ON first.species_id = s.id
       JOIN observations o ON o.species_id = s.id AND o.obs_date = first.first_date
-      WHERE o.latitude IS NOT NULL AND o.longitude IS NOT NULL
+      WHERE o.latitude IS NOT NULL AND o.longitude IS NOT NULL{oc_outer}
       ORDER BY first_date DESC
     """
     with conn_ctx(readonly=True) as con:
-        return [dict(r) for r in con.execute(sql, (mc,)).fetchall()]
+        return [dict(r) for r in con.execute(sql, [mc] + op + op).fetchall()]
 
 
 # ----------------------------------------------------------------- 常去地点
-def get_frequent_places(min_count: int = 3) -> list[dict]:
+def get_frequent_places(min_count: int = 3,
+                        owner_ids: list[int] | None = None) -> list[dict]:
     """从观测记录提取常去地点（出现次数 >= min_count）。
 
     返回 [{"place_name": "...", "lat": 39.9, "lon": 116.4,
-            "obs_count": 15, "species_count": 8, "last_visit": "2026-08-24"}, ...]
+           "obs_count": 15, "species_count": 8, "last_visit": "2026-08-24"}, ...]
     """
-    sql = """
+    op = list(owner_ids) if owner_ids else []
+    oc = _owner_clause("o", owner_ids, [])
+    sql = f"""
       SELECT place_name, AVG(latitude) lat, AVG(longitude) lon,
              COUNT(*) obs_count, COUNT(DISTINCT species_id) species_count,
              MAX(obs_date) last_visit
-      FROM observations
-      WHERE place_name IS NOT NULL AND place_name != ''
+      FROM observations o
+      WHERE place_name IS NOT NULL AND place_name != ''{oc}
       GROUP BY place_name
       HAVING COUNT(*) >= ?
       ORDER BY obs_count DESC
     """
     with conn_ctx(readonly=True) as con:
-        return [dict(r) for r in con.execute(sql, (min_count,)).fetchall()]
+        return [dict(r) for r in con.execute(sql, op + [min_count]).fetchall()]
 
 
-def get_home_region() -> dict | None:
+def get_home_region(owner_ids: list[int] | None = None) -> dict | None:
     """推断常住地：观测最多的城市。"""
-    sql = """
-      SELECT place_name, COUNT(*) c FROM observations
-      WHERE place_name IS NOT NULL AND place_name LIKE '%, %市, %'
+    op = list(owner_ids) if owner_ids else []
+    oc = _owner_clause("o", owner_ids, [])
+    sql = f"""
+      SELECT place_name, COUNT(*) c FROM observations o
+      WHERE place_name IS NOT NULL AND place_name LIKE '%, %市, %'{oc}
       GROUP BY place_name ORDER BY c DESC LIMIT 1
     """
     with conn_ctx(readonly=True) as con:
-        row = con.execute(sql).fetchone()
+        row = con.execute(sql, op).fetchone()
         if not row:
             return None
         # 从 "西直门, 北京市, 中国" 提取 "北京市"

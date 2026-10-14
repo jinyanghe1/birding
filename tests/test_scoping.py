@@ -67,8 +67,8 @@ def test_migration_backfills_owner_id(db_env):
     # 绕过 add_observation，模拟存量数据
     con = sqlite3.connect(db)
     con.execute(
-        "INSERT INTO observations(species_id, obs_date, confidence, identified_by) "
-        "VALUES(?,?,?,?)", (sid, "2026-09-01", 0.8, "legacy"))
+        "INSERT INTO observations(species_id, obs_date, confidence, identified_by, created_at) "
+        "VALUES(?,?,?,?,?)", (sid, "2026-09-01", 0.8, "legacy", "2026-09-01T00:00:00"))
     con.commit()
     con.close()
     # 再跑一次 init_db 触发迁移
@@ -163,7 +163,7 @@ def test_species_detail_scoped(db_env):
     mid = _add_member(db_env)
     _mk_obs(db_env, oid, "详情鸟A")
     _mk_obs(db_env, mid, "详情鸟B")
-    sid_a = store.get_species_detail_by_name("详情鸟A")["id"]
+    sid_a = store.get_species_detail_by_name("详情鸟A")["species"]["id"]
     d_all = store.get_species_detail(sid_a)
     d_mem = store.get_species_detail(sid_a, owner_ids=[mid])
     assert d_all["count"] == 1

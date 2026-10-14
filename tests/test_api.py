@@ -201,8 +201,11 @@ def test_upload_whitelist_and_size(client, owner_headers, monkeypatch):
 def test_invite_flow(client, owner_headers):
     album_id = client.post("/api/albums", headers=owner_headers,
                            json={"name": "家庭相册"}).json()["id"]
+    # 邀请码绑定家庭组（路线 C：入组后组内相册全可见）
+    from birdscan import sharing_v2 as _sharing
+    gid = _sharing.get_user_by_key(TEST_KEY)["group_id"]
     inv = client.post("/api/invites", headers=owner_headers,
-                      json={"album_ids": [album_id], "max_uses": 1})
+                      json={"group_id": gid, "max_uses": 1})
     assert inv.status_code == 200
     code = inv.json()["code"]
 
@@ -235,7 +238,7 @@ def test_invite_flow(client, owner_headers):
 
     # 重名注册不 500（username 自动加后缀）
     inv2 = client.post("/api/invites", headers=owner_headers,
-                       json={"album_ids": [album_id], "max_uses": 1}).json()["code"]
+                       json={"group_id": gid, "max_uses": 1}).json()["code"]
     r = client.post(f"/api/invites/{inv2}/use", json={"display_name": "妈妈"})
     assert r.status_code == 200 and r.json()["username"] != "妈妈"
 

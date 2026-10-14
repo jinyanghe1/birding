@@ -88,9 +88,34 @@ def img(path: str = Query(...)):
 
 
 # ------------------------------------------------------------------ API
+def _optional_user(request: Request) -> dict | None:
+    """可选登录：有有效 key（header 或 cookie）返回用户，否则 None。"""
+    key = auth.key_from_request(request)
+    return sharing.get_user_by_key(key) if key else None
+
+
+def _owner_id() -> int | None:
+    with store.conn_ctx(readonly=True) as con:
+        r = con.execute("SELECT id FROM users WHERE role='owner'").fetchone()
+        return r["id"] if r else None
+
+
+def _read_scope(request: Request) -> list[int] | None:
+    """读端点数据范围（路线 C per-user）：
+    匿名访客 -> 所有者公开数据；member -> 仅自己；owner -> 全部。"""
+    user = _optional_user(request)
+    if user is None:
+        oid = _owner_id()
+        return [oid] if oid else None
+    if user["role"] == "owner":
+        return None
+    return [user["id"]]
+
+
 @app.get("/api/stats")
-def api_stats(min_conf: float = 0.0):
-    return store.get_stats(min_conf if min_conf > 0 else None)
+def api_stats(request: Request, min_conf: float = 0.0):
+    return store.get_stats(min_conf if min_conf > 0 else None,
+                           owner_ids=_read_scope(request))
 
 
 @app.get("/api/config/baidu-map-ak")
@@ -104,41 +129,46 @@ def api_baidu_map_ak():
 
 
 @app.get("/api/species")
-def api_species(order: str = "count", search: str = "", limit: int = 200,
+def api_species(request: Request, order: str = "count", search: str = "", limit: int = 200,
                 min_conf: float = 0.0):
     return store.get_species_list(order=order, search=search, limit=limit,
-                                  min_conf=min_conf if min_conf > 0 else None)
+                                  min_conf=min_conf if min_conf > 0 else None,
+                                  owner_ids=_read_scope(request))
 
 
 @app.get("/api/species/{sid}")
-def api_species_detail(sid: int):
-    d = store.get_species_detail(sid)
+def api_species_detail(request: Request, sid: int):
+    d = store.get_species_detail(sid, owner_ids=_read_scope(request))
     if not d:
         raise HTTPException(404, "not found")
     return d
 
 
 @app.get("/api/calendar")
-def api_calendar(year: int = 0, min_conf: float = 0.0):
+def api_calendar(request: Request, year: int = 0, min_conf: float = 0.0):
     if not year:
         year = datetime.now(config.LOCAL_TZ).year
     return {"year": year,
-            "days": store.get_calendar(year, min_conf if min_conf > 0 else None)}
+            "days": store.get_calendar(year, min_conf if min_conf > 0 else None,
+                                       owner_ids=_read_scope(request))}
 
 
 @app.get("/api/places")
-def api_places(limit: int = 12, min_conf: float = 0.0):
-    return store.get_places(limit, min_conf if min_conf > 0 else None)
+def api_places(request: Request, limit: int = 12, min_conf: float = 0.0):
+    return store.get_places(limit, min_conf if min_conf > 0 else None,
+                            owner_ids=_read_scope(request))
 
 
 @app.get("/api/timeline")
-def api_timeline(min_conf: float = 0.0):
-    return store.get_timeline(min_conf if min_conf > 0 else None)
+def api_timeline(request: Request, min_conf: float = 0.0):
+    return store.get_timeline(min_conf if min_conf > 0 else None,
+                              owner_ids=_read_scope(request))
 
 
 @app.get("/api/hours")
-def api_hours(min_conf: float = 0.0):
-    return store.get_hour_dist(min_conf if min_conf > 0 else None)
+def api_hours(request: Request, min_conf: float = 0.0):
+    return store.get_hour_dist(min_conf if min_conf > 0 else None,
+                               owner_ids=_read_scope(request))
 
 
 @app.get("/api/recommendations")
@@ -149,35 +179,39 @@ def api_recommendations():
 
 
 @app.get("/api/migration")
-def api_migration(species_id: int | None = None, min_conf: float = 0.0):
+def api_migration(request: Request, species_id: int | None = None, min_conf: float = 0.0):
     """按物种聚合历年观测的月份分布，用于迁徙日历。"""
     return store.get_species_monthly_pattern(
-        species_id, min_conf if min_conf > 0 else None)
+        species_id, min_conf if min_conf > 0 else None,
+        owner_ids=_read_scope(request))
 
 
 @app.get("/api/first-seen")
-def api_first_seen(min_conf: float = 0.0):
+def api_first_seen(request: Request, min_conf: float = 0.0):
     """每个物种的首次观测地点，用于「加新地图」。"""
-    return store.get_first_seen_map(min_conf if min_conf > 0 else None)
+    return store.get_first_seen_map(min_conf if min_conf > 0 else None,
+                                    owner_ids=_read_scope(request))
 
 
 @app.get("/api/map")
-def api_map(zoom: int = 3, min_conf: float = 0.0,
+def api_map(request: Request, zoom: int = 3, min_conf: float = 0.0,
             sw_lat: float | None = None, sw_lon: float | None = None,
             ne_lat: float | None = None, ne_lon: float | None = None):
     """网格聚类点，供地图渲染。视口参数可选。"""
     return store.get_map_points(
         zoom=zoom, min_conf=min_conf if min_conf > 0 else None,
-        sw_lat=sw_lat, sw_lon=sw_lon, ne_lat=ne_lat, ne_lon=ne_lon)
+        sw_lat=sw_lat, sw_lon=sw_lon, ne_lat=ne_lat, ne_lon=ne_lon,
+        owner_ids=_read_scope(request))
 
 
 @app.get("/api/map/cell")
-def api_map_cell(lat: float, lon: float, zoom: int = 12,
+def api_map_cell(request: Request, lat: float, lon: float, zoom: int = 12,
                  min_conf: float = 0.0):
     """点开某个簇，返回该网格内的观测明细。"""
     return store.get_observations_at(
         lat, lon, zoom=zoom,
-        min_conf=min_conf if min_conf > 0 else None)
+        min_conf=min_conf if min_conf > 0 else None,
+        owner_ids=_read_scope(request))
 
 
 @app.post("/api/scan")
@@ -200,34 +234,64 @@ def api_queue(status: str = "pending", limit: int = 24):
 
 
 # ------------------------------------------------------------------ CRUD 删除
+def _check_obs_permission(obs_id: int, user: dict) -> None:
+    """写操作权限（路线 C）：owner 全部；成员仅自己的观测。"""
+    if user["role"] == "owner":
+        return
+    with store.conn_ctx(readonly=True) as con:
+        r = con.execute("SELECT owner_id FROM observations WHERE id=?",
+                        (obs_id,)).fetchone()
+    if not r or r["owner_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="只能操作自己的观测")
+
+
+def _check_photo_permission(asset_uuid: str, user: dict) -> None:
+    if user["role"] == "owner":
+        return
+    with store.conn_ctx(readonly=True) as con:
+        r = con.execute(
+            "SELECT o.owner_id FROM photos p JOIN observations o ON o.id=p.obs_id "
+            "WHERE p.asset_uuid=?", (asset_uuid,)).fetchone()
+    if not r or r["owner_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="只能操作自己的照片")
+
+
 @app.delete("/api/photo/{asset_uuid}")
-def api_delete_photo(asset_uuid: str, _: None = Depends(auth.verify_api_key)):
+def api_delete_photo(request: Request, asset_uuid: str):
     """删除一张照片（误识别清理）。"""
+    user = _current_user(request)
+    _check_photo_permission(asset_uuid, user)
     return store.delete_photo(asset_uuid)
 
 
 @app.delete("/api/observation/{obs_id}")
-def api_delete_observation(obs_id: int, _: None = Depends(auth.verify_api_key)):
+def api_delete_observation(request: Request, obs_id: int):
     """删除一条观测记录及其所有照片。"""
+    user = _current_user(request)
+    _check_obs_permission(obs_id, user)
     return store.delete_observation(obs_id)
 
 
 # ------------------------------------------------------------------ 复核工作流
 @app.get("/api/review/suspect")
-def api_suspect(limit: int = 100):
+def api_suspect(request: Request, limit: int = 100):
     """取存疑样本（低置信度 或 不在中国名录）。"""
-    return store.get_suspect_samples(limit)
+    return store.get_suspect_samples(limit, owner_ids=_read_scope(request))
 
 
 @app.post("/api/review/not-bird")
-def api_mark_not_bird(obs_id: int, _: None = Depends(auth.verify_api_key)):
+def api_mark_not_bird(request: Request, obs_id: int):
     """标记「不是鸟」：删除该观测及其照片。"""
+    user = _current_user(request)
+    _check_obs_permission(obs_id, user)
     return store.mark_not_bird(obs_id)
 
 
 @app.post("/api/review/reassign")
-def api_reassign(obs_id: int, new_species_cn: str, _: None = Depends(auth.verify_api_key)):
+def api_reassign(request: Request, obs_id: int, new_species_cn: str):
     """标记「分类错误」：把观测改到另一个物种下。"""
+    user = _current_user(request)
+    _check_obs_permission(obs_id, user)
     return store.reassign_species(obs_id, new_species_cn)
 
 
@@ -238,24 +302,29 @@ IMPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 @app.post("/api/upload")
 async def api_upload(
-    _: None = Depends(auth.verify_api_key),
+    request: Request,
     file: UploadFile = File(...),
     taken_at: str = Form(""),
     place_name: str = Form(""),
 ):
-    """手动上传图片或视频，识别鸟种并入库。
+    """手动上传图片或视频，识别鸟种并入库（归属当前登录用户）。
 
     逻辑：新品种 -> 加新；老品种 -> 在该种类下增加图片与观测次数。
+    鉴权：用户级 key（owner 的全局 key 即其用户 key；成员可上传自己的数据）。
     """
     import hashlib
     import shutil
     import uuid
+
+    user = _current_user(request)
+    owner_id = user["id"]
 
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in (".jpg", ".jpeg", ".png", ".heic", ".webp", ".mp4", ".mov",
                       ".m4v", ".avi"):
         return JSONResponse({"ok": False, "error": f"不支持的格式 {suffix}"}, 400)
 
+    IMPORT_DIR.mkdir(parents=True, exist_ok=True)
     raw = await file.read()
     if len(raw) > 200 * 1024 * 1024:
         return JSONResponse({"ok": False, "error": "文件过大（>200MB）"}, 400)
@@ -297,14 +366,14 @@ async def api_upload(
     sid = store.upsert_species(top["common_name_cn"])
     place = place_name.strip() or None
 
-    obs_id = store.find_observation(sid, obs_date, place, None, None)
+    obs_id = store.find_observation(sid, obs_date, place, None, None, owner_id=owner_id)
     action = "merged"
     if obs_id is None:
         obs_id = store.add_observation(
             sid, obs_date, when[11:19] if len(when) > 10 else None,
             None, None, place, "manual" if place else None,
             None, top["confidence"], "manual_upload",
-            f"手动上传识别（{file.filename}）",
+            f"手动上传识别（{file.filename}）", owner_id=owner_id,
         )
         action = "new_observation"
 
@@ -397,10 +466,12 @@ def api_login(body: dict):
 
 @app.post("/api/invites")
 def api_create_invite(request: Request, body: dict):
+    """owner 生成邀请码：绑定家庭组（group_id），家人入组后组内相册全可见。"""
     key = auth.key_from_request(request)
-    inv = sharing.create_invite(key, body.get("album_ids", []), body.get("max_uses", 1))
+    inv = sharing.create_invite(key, body.get("group_id"), body.get("max_uses", 1))
     if not inv:
-        raise HTTPException(status_code=403, detail="只有 owner 能生成邀请码")
+        raise HTTPException(status_code=403,
+                            detail="只有 owner 能生成邀请码，或组不存在")
     return inv
 
 
@@ -409,11 +480,15 @@ def api_check_invite(code: str):
     """验证邀请码有效性（不消耗）。"""
     with store.conn_ctx(readonly=True) as con:
         inv = con.execute(
-            "SELECT * FROM invites WHERE code=? AND used_count < max_uses",
+            "SELECT i.*, g.name group_name FROM invites i "
+            "LEFT JOIN groups g ON g.id = i.group_id "
+            "WHERE i.code=? AND i.used_count < i.max_uses",
             (code,)).fetchone()
         if not inv:
             raise HTTPException(status_code=404, detail="邀请码无效或已用完")
-        return {"valid": True, "album_ids": json.loads(inv["album_ids"])}
+        return {"valid": True, "group_id": inv["group_id"],
+                "group_name": inv["group_name"],
+                "album_ids": json.loads(inv["album_ids"] or "[]")}
 
 
 @app.post("/api/invites/{code}/use")
@@ -433,9 +508,16 @@ def api_list_albums(request: Request):
 def api_create_album(request: Request, body: dict):
     try:
         return sharing.create_album(_current_user(request),
-                                    body.get("name", ""), body.get("description", ""))
+                                    body.get("name", ""), body.get("description", ""),
+                                    group_id=body.get("group_id"))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/groups")
+def api_list_groups(request: Request):
+    """我的家庭组（owner 看全部；其他人看自己所在的组）。"""
+    return sharing.list_user_groups(_current_user(request))
 
 
 @app.get("/api/albums/{album_id}/photos")

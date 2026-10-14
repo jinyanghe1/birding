@@ -40,6 +40,13 @@ CREATE TABLE IF NOT EXISTS users (
   api_key TEXT UNIQUE NOT NULL,
   role TEXT NOT NULL DEFAULT 'member',
   invite_code TEXT,
+  group_id INTEGER,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS groups (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  created_by INTEGER NOT NULL REFERENCES users(id),
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS albums (
@@ -49,6 +56,7 @@ CREATE TABLE IF NOT EXISTS albums (
   description TEXT,
   cover_photo_id INTEGER,
   is_default BOLEAN DEFAULT 0,
+  group_id INTEGER,
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS album_photos (
@@ -79,7 +87,8 @@ CREATE TABLE IF NOT EXISTS invites (
   id INTEGER PRIMARY KEY,
   code TEXT UNIQUE NOT NULL,
   created_by INTEGER NOT NULL REFERENCES users(id),
-  album_ids TEXT NOT NULL,
+  album_ids TEXT NOT NULL DEFAULT '[]',
+  group_id INTEGER,
   max_uses INTEGER DEFAULT 1,
   used_count INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')),
@@ -156,12 +165,48 @@ def _rebuild_cloud_photos(con) -> bool:
     return True
 
 
+def _migrate_groups(con) -> None:
+    """路线 C：家庭组（groups）模型迁移。
+
+    - users/albums/invites 增加 group_id 列（老库补列）；
+    - 无组时种子创建「我的家庭」（created_by = owner）；
+    - 存量回填：无组用户 → 第一个组；相册/邀请 → 其归属用户的组。
+    幂等。
+    """
+    for table in ("users", "albums", "invites"):
+        try:
+            con.execute(f"SELECT group_id FROM {table} LIMIT 1")
+        except sqlite3.OperationalError:
+            con.execute(f"ALTER TABLE {table} ADD COLUMN group_id INTEGER")
+    owner = con.execute("SELECT id FROM users WHERE role='owner'").fetchone()
+    if not owner:
+        return
+    gid = con.execute("SELECT id FROM groups ORDER BY id LIMIT 1").fetchone()
+    if not gid:
+        cur = con.execute(
+            "INSERT INTO groups(name, created_by) VALUES(?,?)",
+            ("我的家庭", owner["id"]))
+        gid = {"id": cur.lastrowid}
+    gid = gid["id"]
+    # 存量用户进默认组（家庭场景：历史成员都属所有者的组）
+    con.execute("UPDATE users SET group_id=? WHERE group_id IS NULL", (gid,))
+    # 存量相册/邀请归到其归属用户的组
+    con.execute(
+        "UPDATE albums SET group_id = COALESCE("
+        "  (SELECT u.group_id FROM users u WHERE u.id = albums.owner_id), ?) "
+        "WHERE group_id IS NULL", (gid,))
+    con.execute(
+        "UPDATE invites SET group_id = COALESCE("
+        "  (SELECT u.group_id FROM users u WHERE u.id = invites.created_by), ?) "
+        "WHERE group_id IS NULL", (gid,))
+
+
 def init_sharing():
     """建表 + 迁移 + 确保存储目录 + owner 种子（幂等）。"""
     CLOUD_THUMBS.mkdir(parents=True, exist_ok=True)
     CLOUD_ORIG.mkdir(parents=True, exist_ok=True)
     with conn_ctx() as con:
-        # 1. v2 DDL（users/albums/album_photos/cloud_photos/invites 全部 IF NOT EXISTS）
+        # 1. v2 DDL（users/groups/albums/album_photos/cloud_photos/invites 全部 IF NOT EXISTS）
         con.executescript(DDL)
         # 2. owner 种子：fresh DB 或老库没有 owner 行时创建
         owner = con.execute("SELECT id FROM users WHERE role='owner'").fetchone()
@@ -169,12 +214,14 @@ def init_sharing():
             con.execute(
                 "INSERT INTO users(username, display_name, api_key, role) "
                 "VALUES(?,?,?,'owner')", ("owner", "我", _read_owner_key()))
-        # 3. 老库迁移：albums 加 is_default
+        # 3. 家庭组（groups）种子 + group_id 迁移（路线 C）
+        _migrate_groups(con)
+        # 4. 老库迁移：albums 加 is_default
         try:
             con.execute("SELECT is_default FROM albums LIMIT 1")
         except sqlite3.OperationalError:
             con.execute("ALTER TABLE albums ADD COLUMN is_default BOLEAN DEFAULT 0")
-        # 4. 老库迁移：cloud_photos 加 file_hash 并回填
+        # 5. 老库迁移：cloud_photos 加 file_hash 并回填
         try:
             con.execute("SELECT file_hash FROM cloud_photos LIMIT 1")
         except sqlite3.OperationalError:
@@ -186,17 +233,18 @@ def init_sharing():
                     h = hashlib.sha256(fp.read_bytes()).hexdigest()
                     con.execute("UPDATE cloud_photos SET file_hash=? WHERE id=?",
                                 (h, r["id"]))
-        # 5. 重建表迁移：album_id NOT NULL / file_hash UNIQUE
+        # 6. 重建表迁移：album_id NOT NULL / file_hash UNIQUE
         _rebuild_cloud_photos(con)
-        # 6. 默认相册（物种墙）
+        # 7. 默认相册（物种墙，归属所有者的组）
         row = con.execute("SELECT id FROM albums WHERE is_default=1").fetchone()
         if not row:
             owner = con.execute(
-                "SELECT id FROM users WHERE role='owner'").fetchone()
+                "SELECT id, group_id FROM users WHERE role='owner'").fetchone()
             if owner:
                 con.execute(
-                    "INSERT INTO albums(owner_id, name, is_default) VALUES(?,?,1)",
-                    (owner["id"], "物种墙"))
+                    "INSERT INTO albums(owner_id, name, is_default, group_id) "
+                    "VALUES(?,?,1,?)",
+                    (owner["id"], "物种墙", owner["group_id"]))
     return True
 
 
@@ -209,6 +257,7 @@ def get_user_by_key(api_key: str) -> dict | None:
 
 # ---------------------------------------------------------------- 相册
 def list_albums(user: dict) -> list[dict]:
+    """相册列表：owner 看全部；其他用户看本组相册 + 自己创建的。"""
     with conn_ctx(readonly=True) as con:
         if user["role"] == "owner":
             rows = con.execute(
@@ -216,43 +265,38 @@ def list_albums(user: dict) -> list[dict]:
                 "  (SELECT COUNT(*) FROM album_photos ap WHERE ap.album_id=a.id) photo_count "
                 "FROM albums a JOIN users u ON u.id=a.owner_id ORDER BY a.is_default DESC, a.id").fetchall()
         else:
-            # member 只能看到被邀请的相册
             rows = con.execute(
                 "SELECT a.*, u.display_name owner_name, "
                 "  (SELECT COUNT(*) FROM album_photos ap WHERE ap.album_id=a.id) photo_count "
                 "FROM albums a JOIN users u ON u.id=a.owner_id "
-                "WHERE a.owner_id=? OR a.id IN "
-                "  (SELECT json_each.value FROM invites i, json_each(i.album_ids) "
-                "   WHERE i.code IN (SELECT invite_code FROM users WHERE id=?)) "
+                "WHERE a.group_id = ? OR a.owner_id = ? "
                 "ORDER BY a.is_default DESC, a.id",
-                (user["id"], user["id"])).fetchall()
+                (user["group_id"], user["id"])).fetchall()
     return [dict(r) for r in rows]
 
 
-def create_album(user: dict, name: str, description: str = "") -> dict:
+def create_album(user: dict, name: str, description: str = "",
+                 group_id: int | None = None) -> dict:
     name = (name or "").strip()[:50]
     if not name:
         raise ValueError("相册名不能为空")
+    if group_id is None:
+        group_id = user.get("group_id")
     with conn_ctx() as con:
         cur = con.execute(
-            "INSERT INTO albums(owner_id, name, description) VALUES(?,?,?)",
-            (user["id"], name, description))
-        return {"id": cur.lastrowid, "name": name}
+            "INSERT INTO albums(owner_id, name, description, group_id) VALUES(?,?,?,?)",
+            (user["id"], name, description, group_id))
+        return {"id": cur.lastrowid, "name": name, "group_id": group_id}
 
 
 def get_album(album_id: int, user: dict) -> dict | None:
+    """相册可见性：owner 全部；否则本组或自己创建的。"""
     with conn_ctx(readonly=True) as con:
         r = con.execute("SELECT * FROM albums WHERE id=?", (album_id,)).fetchone()
         if not r:
             return None
         if user["role"] != "owner" and r["owner_id"] != user["id"]:
-            # 检查是否有权限（被邀请）
-            invited = con.execute(
-                "SELECT 1 FROM invites i, json_each(i.album_ids) j "
-                "WHERE j.value = ? AND i.code IN "
-                "  (SELECT invite_code FROM users WHERE id=?)",
-                (album_id, user["id"])).fetchone()
-            if not invited:
+            if r["group_id"] is None or r["group_id"] != user.get("group_id"):
                 return None
         return dict(r)
 
@@ -284,22 +328,30 @@ def delete_album(album_id: int, user: dict) -> dict | None:
     return {"ok": True, "deleted_album": album["name"], "gc_photos": len(orphans)}
 
 
-# ---------------------------------------------------------------- 邀请码
-def create_invite(owner_key: str, album_ids: list[int], max_uses: int = 1) -> dict | None:
+# ---------------------------------------------------------------- 邀请码（绑定组）
+def create_invite(owner_key: str, group_id: int, max_uses: int = 1) -> dict | None:
+    """owner 生成邀请码：绑定家庭组（非一次性相册列表）。
+
+    家人用码注册后加入该组，组内全部相册（含之后新建）自动可见。
+    """
     owner = get_user_by_key(owner_key)
     if not owner or owner["role"] != "owner":
         return None
     try:
-        album_ids = [int(a) for a in (album_ids or [])][:50]
+        group_id = int(group_id)
     except (TypeError, ValueError):
         return None
+    with conn_ctx(readonly=True) as con:
+        if not con.execute("SELECT 1 FROM groups WHERE id=?", (group_id,)).fetchone():
+            return None
     max_uses = max(1, min(int(max_uses or 1), 100))
     code = secrets.token_hex(8)
     with conn_ctx() as con:
         con.execute(
-            "INSERT INTO invites(code, created_by, album_ids, max_uses) VALUES(?,?,?,?)",
-            (code, owner["id"], json.dumps(album_ids), max_uses))
-    return {"code": code, "album_ids": album_ids, "max_uses": max_uses}
+            "INSERT INTO invites(code, created_by, album_ids, group_id, max_uses) "
+            "VALUES(?,?,?,?,?)",
+            (code, owner["id"], "[]", group_id, max_uses))
+    return {"code": code, "group_id": group_id, "max_uses": max_uses}
 
 
 def _unique_username(con, display_name: str) -> str:
@@ -316,7 +368,7 @@ def _unique_username(con, display_name: str) -> str:
 
 
 def use_invite(code: str, display_name: str) -> dict | None:
-    """用邀请码注册。原子占用额度（防并发超用）；空名返回 None。"""
+    """用邀请码注册：加入邀请绑定的家庭组。原子占用额度；空名返回 None。"""
     display_name = (display_name or "").strip()[:32]
     if not display_name or not code:
         return None
@@ -331,12 +383,40 @@ def use_invite(code: str, display_name: str) -> dict | None:
         api_key = secrets.token_hex(32)
         username = _unique_username(con, display_name)
         cur = con.execute(
-            "INSERT INTO users(username, display_name, api_key, role, invite_code) "
-            "VALUES(?,?,?,?,?)",
-            (username, display_name, api_key, "member", code))
+            "INSERT INTO users(username, display_name, api_key, role, invite_code, group_id) "
+            "VALUES(?,?,?,?,?,?)",
+            (username, display_name, api_key, "member", code, inv["group_id"]))
+        group = None
+        if inv["group_id"]:
+            g = con.execute("SELECT name FROM groups WHERE id=?",
+                            (inv["group_id"],)).fetchone()
+            group = dict(g) if g else None
         return {"user_id": cur.lastrowid, "username": username,
                 "display_name": display_name, "api_key": api_key,
-                "album_ids": json.loads(inv["album_ids"]) if inv else []}
+                "group_id": inv["group_id"],
+                "group_name": group["name"] if group else None,
+                "album_ids": json.loads(inv["album_ids"] or "[]")}
+
+
+# ---------------------------------------------------------------- 家庭组
+def list_user_groups(user: dict) -> list[dict]:
+    """当前用户可见的组：owner 全部；其他人看自己所在的组。"""
+    with conn_ctx(readonly=True) as con:
+        if user["role"] == "owner":
+            rows = con.execute(
+                "SELECT g.*, (SELECT COUNT(*) FROM users u WHERE u.group_id=g.id) member_count "
+                "FROM groups g ORDER BY g.id").fetchall()
+        else:
+            rows = con.execute(
+                "SELECT g.*, (SELECT COUNT(*) FROM users u WHERE u.group_id=g.id) member_count "
+                "FROM groups g WHERE g.id=? ORDER BY g.id", (user.get("group_id"),)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_group(group_id: int) -> dict | None:
+    with conn_ctx(readonly=True) as con:
+        r = con.execute("SELECT * FROM groups WHERE id=?", (group_id,)).fetchone()
+        return dict(r) if r else None
 
 
 # ---------------------------------------------------------------- 照片（去重核心）
@@ -403,7 +483,7 @@ def list_album_photos(album_id: int, user: dict, limit: int = 200,
 
 # ---------------------------------------------------------------- 单张照片（v2 补齐）
 def get_cloud_photo(photo_id: int, user: dict) -> dict | None:
-    """取照片；权限：owner / 上传者本人 / 任一可见相册包含它。"""
+    """取照片；权限：owner / 上传者本人 / 任一组内可见相册包含它。"""
     with conn_ctx(readonly=True) as con:
         r = con.execute("SELECT * FROM cloud_photos WHERE id=?", (photo_id,)).fetchone()
         if not r:
@@ -412,10 +492,8 @@ def get_cloud_photo(photo_id: int, user: dict) -> dict | None:
             return dict(r)
         vis = con.execute(
             "SELECT 1 FROM album_photos ap JOIN albums a ON a.id=ap.album_id "
-            "WHERE ap.photo_id=? AND (a.owner_id=? OR a.id IN "
-            "  (SELECT json_each.value FROM invites i, json_each(i.album_ids) "
-            "   WHERE i.code IN (SELECT invite_code FROM users WHERE id=?)))",
-            (photo_id, user["id"], user["id"])).fetchone()
+            "WHERE ap.photo_id=? AND (a.owner_id=? OR a.group_id=?)",
+            (photo_id, user["id"], user.get("group_id"))).fetchone()
         return dict(r) if vis else None
 
 

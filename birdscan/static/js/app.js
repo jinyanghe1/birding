@@ -1,4 +1,4 @@
-/* app.js — 启动引导：加新上传、tab 绑定、登录态、邀请链接 */
+/* app.js — 启动引导：加新上传、tab 绑定、API Key 设置 */
 (function (B) {
   const { $ } = B;
 
@@ -44,36 +44,23 @@
     }
   }
 
-  // ---------------- 邀请链接横幅 ----------------
-  function checkInviteLink() {
-    const m = location.search.match(/invite=([a-f0-9]+)/);
-    if (!m) return;
-    $('#regBanner').style.display = 'flex';
-    $('#regBtn').onclick = () => B.registerWithInvite(m[1]);
-    $('#regSkip').onclick = () => { $('#regBanner').style.display = 'none'; };
-    history.replaceState({}, '', location.pathname);
-  }
-
   // ---------------- 启动 ----------------
   async function boot() {
     B.bindWall();
     B.bindRec();
     B.bindRun();
-    B.bindAlbums();
     $('#addBtn').onclick = () => B.openDialog('#addModal');
     $('#keyBtn').onclick = () => B.showLogin();
     $('#btnSaveKey').onclick = () => B.saveApiKey();
     $('#btnCloseKey').onclick = () => B.closeDialog('#keyModal');
     $('#btnAddGo').onclick = doAdd;
     $('#btnAddCancel').onclick = closeAdd;
-    $('#mask').onclick = () => { B.closeModal(); B.closeDialog('#keyModal'); B.closeDialog('#inviteModal'); B.closeDialog('#addModal'); };
+    $('#mask').onclick = () => { B.closeModal(); B.closeDialog('#keyModal'); B.closeDialog('#addModal'); };
 
     // tab 点击
     B.$$('.tab[data-t]').forEach((t) => (t.onclick = () => B.switchTab(t.dataset.t)));
 
-    await B.ensureSession();
     B.initBottomNav();
-    checkInviteLink();
 
     let tab = 'wall';
     try { tab = localStorage.getItem('birding_tab') || 'wall'; } catch (e) {}

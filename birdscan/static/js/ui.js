@@ -43,7 +43,7 @@ window.B = window.B || {};
     currentTab = name;
     $$('.tab[data-t]').forEach((t) => t.classList.toggle('on', t.dataset.t === name));
     $$('.bottomNav a').forEach((a) => a.classList.toggle('on', a.dataset.tab === name));
-    ['wall', 'map', 'viz', 'rec', 'albums', 'review', 'run'].forEach((k) => {
+    ['wall', 'map', 'viz', 'rec', 'review', 'run'].forEach((k) => {
       const el = $('#t-' + k);
       if (el) el.style.display = k === name ? 'block' : 'none';
     });

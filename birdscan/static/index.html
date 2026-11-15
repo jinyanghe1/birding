@@ -13,7 +13,6 @@
   <header>
     <h1>我的观鸟档案</h1>
     <span class="sp"></span>
-    <span class="scopeChip" id="scopeChip" title="长程重构后支持按用户/家庭组筛选">数据范围：全部</span>
     <input id="q" placeholder="搜索鸟名 / 学名 / 科" autocomplete="off">
     <select id="ord">
       <option value="count">按观测次数</option>
@@ -27,15 +26,8 @@
       <option value="0">全部（含噪声）</option>
     </select>
     <button id="addBtn" class="btn primary">＋ 加新</button>
-    <span id="userBadge" class="userBadge"></span>
     <button id="keyBtn" class="btn" title="设置 API Key">🔑</button>
   </header>
-
-  <div id="regBanner">
-    <span>你收到了家庭相册的邀请链接 🎉</span>
-    <button id="regBtn" class="btn primary sm">接受邀请并注册</button>
-    <button id="regSkip" class="btn sm ghost">暂不</button>
-  </div>
 
   <div class="stats" id="stats"></div>
 
@@ -44,7 +36,6 @@
     <div class="tab" data-t="map">地图</div>
     <div class="tab" data-t="viz">可视化</div>
     <div class="tab" data-t="rec">推荐</div>
-    <div class="tab" data-t="albums">家庭相册</div>
     <div class="tab" data-t="review">不是我的鸟？</div>
     <div class="tab" data-t="run">扫描与识别</div>
   </div>
@@ -107,38 +98,6 @@
     </div>
   </div>
 
-  <div id="t-albums" style="display:none">
-    <div class="panel">
-      <h2>家庭相册</h2>
-      <p class="tiny">家人共享的观鸟相册。点 🔑 设置 API Key 登录后可上传、下载、邀请家人。</p>
-
-      <div class="albumTabs" id="albumTabs">
-        <div class="tab on" data-album="all">全部</div>
-      </div>
-
-      <div class="albumToolbar">
-        <input id="newAlbumName" placeholder="新相册名（例如：深圳湾 2026 春）" style="flex:1;max-width:320px">
-        <button id="btnCreateAlbum" class="btn primary" title="创建新相册，默认只有你能看到">创建相册</button>
-        <button id="btnInvite" class="btn" title="生成邀请链接，家人注册后只能看到你勾选的相册">邀请家人</button>
-      </div>
-
-      <div id="albumList"></div>
-
-      <div id="albumDetail" style="display:none;margin-top:16px">
-        <h3 id="albumTitle"></h3>
-        <div class="albumToolbar">
-          <button id="btnAlbumUpload" class="btn primary">上传照片</button>
-          <button id="btnAlbumDownload" class="btn">下载整本</button>
-          <button id="btnAlbumDelete" class="btn danger" title="删除相册（不可恢复）">删除相册</button>
-        </div>
-        <div id="albumDrop" class="dropzone">点这里选择照片，或把照片拖进来（JPG/PNG/WebP/HEIC/视频，单张 ≤50MB）</div>
-        <input type="file" id="albumFiles" accept="image/*,video/*" multiple style="display:none">
-        <div id="uploadProgress"></div>
-        <div id="albumPhotos"></div>
-      </div>
-    </div>
-  </div>
-
   <div id="t-review" style="display:none">
     <div class="panel">
       <h2>不是我的鸟？</h2>
@@ -169,34 +128,16 @@
 <div id="mask"></div>
 <div id="modal"></div>
 
-<!-- API Key 登录 -->
+<!-- API Key 设置 -->
 <div id="keyModal" class="dialog">
-  <h2>API Key 登录</h2>
+  <h2>设置 API Key</h2>
   <div class="row">
-    <label>写操作（删除/复核/上传）和家庭相册需要 API Key</label>
+    <label>写操作（删除/复核/上传）需要 API Key（存本地，仅写操作携带）</label>
     <input id="apiKeyInput" type="password" placeholder="输入 API Key">
   </div>
   <div class="act">
     <button id="btnCloseKey" class="btn">取消</button>
-    <button id="btnSaveKey" class="btn primary">保存并登录</button>
-  </div>
-</div>
-
-<!-- 邀请码弹窗 -->
-<div id="inviteModal" class="dialog">
-  <h2>邀请家人</h2>
-  <div class="row">
-    <label>选择相册权限（默认全选）</label>
-    <div id="inviteAlbums" class="inviteAlbums"></div>
-  </div>
-  <div class="act">
-    <button class="btn" onclick="B.closeDialog('#inviteModal')">取消</button>
-    <button id="btnGenerateInvite" class="btn primary">生成邀请码</button>
-  </div>
-  <div id="inviteResult" style="display:none;margin-top:16px">
-    <div class="tiny">邀请链接（发给家人，只能用一次）：</div>
-    <div id="inviteLink" class="inviteLink"></div>
-    <button id="btnCopyInvite" class="btn sm primary">复制链接</button>
+    <button id="btnSaveKey" class="btn primary">保存</button>
   </div>
 </div>
 
@@ -225,7 +166,6 @@
 <nav class="bottomNav" id="bottomNav">
   <a href="#" data-tab="wall" class="on"><span class="icon">🏠</span><span>首页</span></a>
   <a href="#" data-tab="map"><span class="icon">🗺️</span><span>地图</span></a>
-  <a href="#" data-tab="albums"><span class="icon">📷</span><span>相册</span></a>
   <a href="#" data-tab="review"><span class="icon">✓</span><span>复核</span></a>
 </nav>
 
@@ -237,7 +177,6 @@
 <script src="/static/js/map.js"></script>
 <script src="/static/js/viz.js"></script>
 <script src="/static/js/rec.js"></script>
-<script src="/static/js/albums.js"></script>
 <script src="/static/js/review.js"></script>
 <script src="/static/js/run.js"></script>
 <script src="/static/js/app.js"></script>

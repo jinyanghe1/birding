@@ -11,6 +11,12 @@ import logging
 import sys
 from pathlib import Path
 
+# 允许「直接脚本运行」（launchd plist 历史上就是直接跑这个文件）：
+# python birdscan/cli.py scan 也能工作，不要求 -m birdscan.cli
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    __package__ = "birdscan"
+
 from . import config, identify, pipeline, store
 
 

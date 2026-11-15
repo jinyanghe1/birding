@@ -4,7 +4,7 @@
 
 set -e
 
-KEY="$HOME/Downloads/birding.pem"
+KEY="$HOME/.ssh/birding_deploy"
 SERVER="ubuntu@124.223.171.149"
 LOCAL_DIR="/Users/hejinyang/WorkBuddy/观鸟skill"
 
@@ -13,14 +13,16 @@ cd "$LOCAL_DIR"
 tar czf /tmp/birding.tar.gz --exclude='__pycache__' --exclude='*.pyc' birdscan/
 
 echo "=== 上传代码 ==="
-scp -i "$KEY" /tmp/birding.tar.gz "$SERVER:~/"
+scp -i "$KEY" -o BatchMode=yes /tmp/birding.tar.gz "$SERVER:~/"
 
 echo "=== 解压并重启 ==="
-ssh -i "$KEY" "$SERVER" << 'REMOTE'
+ssh -i "$KEY" -o BatchMode=yes "$SERVER" << 'REMOTE'
 cd ~/birding
 tar xzf ~/birding.tar.gz
 # 静态文件也要部署（PWA manifest/sw.js）
 cp -r birdscan/static/* /var/www/html/ 2>/dev/null || true
+# 清理已下线的模块（cp 只增不删，回滚后需手动清）
+rm -f /var/www/html/js/albums.js
 sudo systemctl restart birding
 sleep 2
 sudo systemctl status birding --no-pager | head -5

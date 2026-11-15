@@ -1,9 +1,6 @@
-"""轻量级鉴权：API Key + Cookie 登录态。
+"""轻量级鉴权：写操作需要 X-API-Key 请求头。
 
-方案：
-  1. API Key（推荐）：请求头 X-API-Key，本地和服务器各配一个
-  2. Cookie 登录态：登录后种 HttpOnly Cookie（birding_key），
-     供 <img>/window.open 等无法带自定义 header 的场景使用
+方案：请求头 X-API-Key，本地和服务器各配一个；读操作匿名开放。
 
 配置：
   - 本地：config.LOCAL_API_KEY（默认 dev-key，不需要改）
@@ -18,8 +15,6 @@ from pathlib import Path
 from fastapi import HTTPException, Header, Request
 
 from . import config
-
-COOKIE_NAME = "birding_key"
 
 
 def _get_api_key() -> str:
@@ -38,20 +33,11 @@ def _get_api_key() -> str:
 
 API_KEY = _get_api_key()
 
-# 写操作需要鉴权的端点
+# 写操作需要鉴权的端点（/api/scan 为 2026-10-14 P0-4 安全修复，回滚时保留）
 WRITE_ENDPOINTS = {
     "/api/photo", "/api/observation", "/api/review/not-bird",
     "/api/review/reassign", "/api/upload", "/api/scan",
 }
-
-
-def key_from_request(request: Request | None, x_api_key: str | None = None) -> str:
-    """Header 优先，其次 Cookie（<img>/window.open 场景）。"""
-    if x_api_key:
-        return x_api_key
-    if request is not None:
-        return request.headers.get("X-API-Key") or request.cookies.get(COOKIE_NAME, "")
-    return ""
 
 
 def verify_api_key(x_api_key: str = Header(None), request: Request = None):
@@ -66,7 +52,7 @@ def verify_api_key(x_api_key: str = Header(None), request: Request = None):
     if request and not any(request.url.path.startswith(ep) for ep in WRITE_ENDPOINTS):
         return
 
-    key = key_from_request(request, x_api_key)
+    key = x_api_key or (request.headers.get("X-API-Key") if request else None) or ""
     if not key or not secrets.compare_digest(key, API_KEY):
         raise HTTPException(status_code=401, detail="未授权")
 

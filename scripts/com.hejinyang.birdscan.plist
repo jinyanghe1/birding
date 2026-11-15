@@ -7,10 +7,8 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/hejinyang/.workbuddy/binaries/python/envs/birdskill/bin/python</string>
-        <string>-m</string>
-        <string>birdscan.cli</string>
-        <string>scan</string>
+        <string>/bin/zsh</string>
+        <string>/Users/hejinyang/WorkBuddy/观鸟skill/scripts/scan_daily.sh</string>
     </array>
 
     <key>WorkingDirectory</key>

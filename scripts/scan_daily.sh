@@ -45,16 +45,18 @@ cp "$SNAP" "$ROOT/data/birds.db.bak.nightly.$(date +%Y%m%d)"
 ls -t "$ROOT"/data/birds.db.bak.nightly.* 2>/dev/null | tail -n +8 | xargs rm -f 2>/dev/null
 
 # 4. rsync：DB 快照 + 缩略图增量（不加 --delete，孤儿缩略图无害）
-SSH_OPTS="-i $KEY -o BatchMode=yes -o ConnectTimeout=15"
-rsync -az --partial --timeout=300 -e "ssh $SSH_OPTS" \
+rsync -az --partial --timeout=300 \
+  -e "ssh -i $KEY -o BatchMode=yes -o ConnectTimeout=15" \
   "$SNAP" "$SRV:$REMOTE_DATA/birds.db.new" >> "$LOG" 2>&1 \
   || { echo "[$(ts)] !! DB rsync failed（非致命）" >> "$LOG"; exit 0; }
-rsync -az --partial --timeout=300 -e "ssh $SSH_OPTS" \
+rsync -az --partial --timeout=300 \
+  -e "ssh -i $KEY -o BatchMode=yes -o ConnectTimeout=15" \
   "$ROOT/data/thumbs/" "$SRV:$REMOTE_DATA/thumbs/" >> "$LOG" 2>&1 \
   || echo "[$(ts)] !! thumbs rsync failed（非致命）" >> "$LOG"
 
 # 5. 服务器：停服（WAL 落盘）→ 清 WAL 残留 → 备份轮换 → 原子换库 → 起服
-ssh $SSH_OPTS "$SRV" '
+#    （zsh 不做变量分词，ssh 参数必须逐个传）
+ssh -i "$KEY" -o BatchMode=yes -o ConnectTimeout=15 "$SRV" '
   set -e
   sudo systemctl stop birding
   cd ~/birding/data

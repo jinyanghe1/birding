@@ -88,6 +88,14 @@ def test_anonymous_can_read(client):
         assert r.status_code == 200, f"{url} 应匿名可读，实际 {r.status_code}"
 
 
+def test_frontend_assets_must_revalidate(client):
+    """部署后旧浏览器不得长期复用过期 HTML/JS/CSS。"""
+    for url in ("/", "/sw.js", "/static/js/wall.js", "/static/css/app.css"):
+        r = client.get(url)
+        assert r.status_code == 200
+        assert "no-cache" in r.headers.get("cache-control", ""), url
+
+
 def test_write_requires_key(client):
     """写操作无 key 一律 401。"""
     assert client.delete("/api/photo/some-uuid").status_code == 401

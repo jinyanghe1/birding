@@ -16,6 +16,17 @@ log = logging.getLogger("birdscan.web")
 
 app = FastAPI(title="观鸟数据库", version="0.2.0")
 
+
+@app.middleware("http")
+async def prevent_stale_frontend(request, call_next):
+    """HTML/JS/CSS 必须 revalidate，避免部署后旧浏览器继续运行过期资源。"""
+    response = await call_next(request)
+    path = request.url.path
+    if path == "/" or path == "/sw.js" or path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
+
+
 STATIC = Path(__file__).parent / "static"
 
 # 允许通过 /img 读取的根目录（防止任意文件读取）

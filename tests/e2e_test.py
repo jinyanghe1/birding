@@ -44,8 +44,32 @@ async def case_page_load():
         # 统计卡与物种墙有渲染
         n = await page.locator("#stats .stat").count()
         assert n >= 4, f"统计卡渲染异常: {n}"
+        # 光有统计卡不代表物种墙正常；必须断言真实卡片已渲染。
+        await page.wait_for_function("document.querySelectorAll('#grid .card').length > 0")
+        cards = await page.locator("#grid .card").count()
+        assert cards > 0, "物种墙不应为空"
+        assert "还没有观测记录" not in await page.locator("#grid").inner_text()
         await browser.close()
         print("✅ 页面加载测试通过（无 JS 错误，统计卡正常）")
+
+
+async def case_wall_error_state():
+    """接口失败必须显示真实错误，不得伪装成“还没有观测记录”。"""
+    async with async_playwright() as p:
+        browser, page, _ = await _new_page(p)
+
+        async def fail_species(route):
+            await route.fulfill(status=500, content_type="application/json",
+                                body='{"detail":"e2e forced failure"}')
+
+        await page.route("**/api/species?min_conf=*", fail_species)
+        await page.goto(BASE, timeout=30000)
+        await page.wait_for_function("document.querySelector('#grid').textContent.includes('加载失败')")
+        text = await page.locator("#grid").inner_text()
+        assert "还没有观测记录" not in text
+        assert await page.locator("#grid button", has_text="重新加载").count() == 1
+        await browser.close()
+        print("✅ 物种墙接口异常提示测试通过")
 
 
 async def case_tab_switch():
@@ -206,6 +230,7 @@ async def case_recommendation_location():
 async def main():
     print(f"=== 开始 E2E 测试（{BASE}）===")
     await case_page_load()
+    await case_wall_error_state()
     await case_tab_switch()
     await case_review_actions()
     await case_map_location()

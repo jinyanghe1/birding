@@ -4,10 +4,19 @@
   let ALL = [];
 
   async function load() {
-    const [st, sp] = await Promise.all([
-      apiJSON('stats').catch(() => ({})),
-      apiJSON('species?min_conf=' + mc()).catch(() => []),
-    ]);
+    const g = $('#grid');
+    g.innerHTML = '<div class="empty">正在加载物种墙…</div>';
+    let st, sp;
+    try {
+      [st, sp] = await Promise.all([
+        apiJSON('stats').catch(() => ({})),
+        apiJSON('species?min_conf=' + mc()),
+      ]);
+    } catch (e) {
+      g.innerHTML = `<div class="empty">物种墙加载失败：${esc(e.message || String(e))}<br>
+        <button class="btn" onclick="B.loadWall()">重新加载</button></div>`;
+      return;
+    }
     const list = sp;
     const prot1 = list.filter((s) => s.china_protection === '一级').length;
     const prot2 = list.filter((s) => s.china_protection === '二级').length;
@@ -24,7 +33,6 @@
     ].map(([l, n]) => `<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
 
     ALL = list;
-    const g = $('#grid');
     if (!list.length) {
       g.innerHTML = '<div class="empty">还没有观测记录。<br>去「扫描与识别」标签页跑一次扫描。</div>';
       return;
@@ -111,6 +119,7 @@
   }
 
   B.registerTab('wall', { show: load });
+  B.loadWall = load;
   B.openSpecies = openSpecies;
   B.afterObsChange = afterObsChange;
   B.bindWall = bind;

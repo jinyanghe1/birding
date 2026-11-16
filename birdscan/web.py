@@ -100,6 +100,12 @@ def api_baidu_map_ak():
     return {"ak": ""}
 
 
+@app.get("/api/species/search")
+def api_species_search(q: str = "", limit: int = 10):
+    """物种自动补全：正名/别名/英文名/拉丁名模糊匹配，返回规范名。"""
+    return store.search_species(q, limit)
+
+
 @app.get("/api/species")
 def api_species(order: str = "count", search: str = "", limit: int = 200,
                 min_conf: float = 0.0):
@@ -138,11 +144,42 @@ def api_hours(min_conf: float = 0.0):
     return store.get_hour_dist(min_conf if min_conf > 0 else None)
 
 
+@app.get("/api/config/home")
+def api_get_home():
+    """常住地（地图默认中心 + 推荐城市），含可选城市列表。"""
+    from . import locations
+    return {**locations.get_home(), "cities": locations.list_cities()}
+
+
+@app.post("/api/config/home")
+def api_set_home(city: str, _: None = Depends(auth.verify_api_key)):
+    """设置常住地（写操作需鉴权）。"""
+    from . import locations
+    out = locations.set_home(city)
+    if not out.get("ok"):
+        raise HTTPException(400, out.get("reason", "bad_city"))
+    return out
+
+
 @app.get("/api/recommendations")
-def api_recommendations():
-    """推荐清单：社区热点物种 - 我的观测 = 这个月该去看什么。"""
-    from . import ebird_calendar
-    return ebird_calendar.get_recommendations()
+def api_recommendations(city: str | None = None, region: str | None = None,
+                        lat: float | None = None, lon: float | None = None,
+                        days: int = 30):
+    """推荐清单：当地社区热点物种 - 我的观测 = 这个月该去看什么。
+
+    优先级：lat/lon（浏览器定位）> city（中文城市名）> region（eBird 区域码）> 常住地。
+    """
+    from . import ebird_calendar, locations
+    if lat is not None and lon is not None:
+        return ebird_calendar.get_recommendations(lat=lat, lon=lon, days=days)
+    if city:
+        coords = locations.coords_for(city)
+        if not coords:
+            raise HTTPException(400, "unknown_city")
+        region = coords[2]
+    if not region:
+        region = locations.get_home()["region"]
+    return ebird_calendar.get_recommendations(region=region, days=days)
 
 
 @app.get("/api/migration")
@@ -224,10 +261,23 @@ def api_mark_not_bird(obs_id: int,
 
 
 @app.post("/api/review/reassign")
-def api_reassign(obs_id: int, new_species_cn: str,
+def api_reassign(obs_id: int, new_species_cn: str = "",
+                 species_id: int | None = None,
                  _: None = Depends(auth.verify_api_key)):
-    """标记「分类错误」：把观测改到另一个物种下。"""
-    return store.reassign_species(obs_id, new_species_cn)
+    """标记「分类错误」：把观测改到另一个物种下。
+
+    优先 species_id（自动补全选中的规范物种）；否则按名字解析别名后归一。
+    """
+    out = store.reassign_species(obs_id, new_species_cn or None, species_id)
+    if out.get("error"):
+        raise HTTPException(400, out["error"])
+    return out
+
+
+@app.get("/api/species/{sid}/aliases")
+def api_species_aliases(sid: int):
+    """某物种的别名列表（用于展示同鸟多名归一结果）。"""
+    return {"species_id": sid, "aliases": store.get_aliases(sid)}
 
 
 # ------------------------------------------------------------------ 手动导入

@@ -38,6 +38,15 @@ CREATE TABLE IF NOT EXISTS species (
   created_at       TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS species_aliases (
+  id          INTEGER PRIMARY KEY,
+  species_id  INTEGER NOT NULL REFERENCES species(id) ON DELETE CASCADE,
+  alias       TEXT NOT NULL UNIQUE,
+  source      TEXT DEFAULT 'manual',
+  created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_alias_species ON species_aliases(species_id);
+
 CREATE TABLE IF NOT EXISTS observations (
   id             INTEGER PRIMARY KEY,
   species_id     INTEGER NOT NULL REFERENCES species(id),
@@ -857,9 +866,131 @@ def annotate_observation(obs_id: int, note: str) -> dict:
     return {"annotated": obs_id, "note": tag}
 
 
-def reassign_species(obs_id: int, new_species_cn: str) -> dict:
-    """标记「分类错误」：把观测改到另一个物种下。"""
-    sid = upsert_species(new_species_cn)
+# ------------------------------------------------------- 物种名解析与别名
+def add_alias(species_id: int, alias: str, source: str = "manual") -> dict:
+    """给物种登记别名（俗名/简称/旧称），用于同鸟多名归一。"""
+    alias = (alias or "").strip()
+    if not alias:
+        return {"ok": False, "reason": "empty_alias"}
+    with conn_ctx() as con:
+        # 别名若已指向别的物种，拒绝（避免归一错对象）
+        row = con.execute("SELECT species_id FROM species_aliases WHERE alias = ?",
+                          (alias,)).fetchone()
+        if row and row["species_id"] != species_id:
+            return {"ok": False, "reason": "alias_taken", "species_id": row["species_id"]}
+        con.execute(
+            "INSERT OR IGNORE INTO species_aliases(species_id, alias, source, created_at)"
+            " VALUES (?,?,?,?)", (species_id, alias, source, now_iso()))
+    return {"ok": True, "species_id": species_id, "alias": alias}
+
+
+def get_aliases(species_id: int) -> list[str]:
+    with conn_ctx(readonly=True) as con:
+        return [r["alias"] for r in con.execute(
+            "SELECT alias FROM species_aliases WHERE species_id = ? ORDER BY alias",
+            (species_id,))]
+
+
+def resolve_species_name(name: str) -> int | None:
+    """把用户输入的名字解析为库内物种 id（同鸟多名归一的关键）。
+
+    顺序：中文正名精确 → 别名精确 → 英文名/拉丁学名精确（大小写不敏感）。
+    查不到返回 None，由调用方决定是否新建物种。
+    """
+    name = (name or "").strip()
+    if not name:
+        return None
+    with conn_ctx(readonly=True) as con:
+        row = con.execute("SELECT id FROM species WHERE common_name_cn = ?",
+                          (name,)).fetchone()
+        if row:
+            return row["id"]
+        row = con.execute("SELECT species_id FROM species_aliases WHERE alias = ?",
+                          (name,)).fetchone()
+        if row:
+            return row["species_id"]
+        row = con.execute(
+            "SELECT id FROM species WHERE LOWER(common_name_en) = LOWER(?)"
+            " OR LOWER(scientific_name) = LOWER(?)", (name, name)).fetchone()
+        if row:
+            return row["id"]
+    return None
+
+
+def search_species(q: str, limit: int = 10) -> list[dict]:
+    """自动补全搜索：中文正名/别名/英文名/拉丁学名 模糊匹配，返回规范名。
+
+    排序：正名或别名精确命中 > 前缀命中 > 包含命中 > 其他；同优先级按观测数排序。
+    返回项含 matched_alias（命中的是哪个别名），便于前端解释「玄凤 → 玄凤鹦鹉」。
+    """
+    q = (q or "").strip()
+    if not q:
+        return []
+    like = f"%{q}%"
+    with conn_ctx(readonly=True) as con:
+        rows = con.execute(
+            """SELECT s.id, s.common_name_cn, s.common_name_en, s.scientific_name,
+                      s.family_cn, a.alias matched_alias,
+                      (SELECT COUNT(*) FROM observations o WHERE o.species_id = s.id) obs_n
+               FROM species s
+               LEFT JOIN species_aliases a ON a.species_id = s.id
+               WHERE s.common_name_cn LIKE ? OR s.common_name_en LIKE ?
+                  OR s.scientific_name LIKE ? OR a.alias LIKE ?
+               LIMIT 400""", (like, like, like, like)).fetchall()
+    # 按物种去重（一个物种可能因正名+别名命中多行）
+    best: dict[int, dict] = {}
+    for r in rows:
+        d = dict(r)
+        sid = d["id"]
+        if sid not in best or (d["matched_alias"] and not best[sid]["matched_alias"]):
+            best[sid] = d
+
+    ql = q.lower()
+
+    def rank(d: dict) -> tuple:
+        cn = d["common_name_cn"] or ""
+        al = d["matched_alias"] or ""
+        en = (d["common_name_en"] or "").lower()
+        sci = (d["scientific_name"] or "").lower()
+        if cn == q or al == q:
+            pri = 0
+        elif cn.startswith(q) or al.startswith(q) or en.startswith(ql) or sci.startswith(ql):
+            pri = 1
+        else:
+            pri = 2
+        return (pri, -(d["obs_n"] or 0), len(cn), cn)
+
+    out = sorted(best.values(), key=rank)[:limit]
+    for d in out:
+        d["aliases"] = get_aliases(d["id"])
+    return out
+
+
+def reassign_species(obs_id: int, new_species_cn: str | None = None,
+                     species_id: int | None = None) -> dict:
+    """标记「分类错误」：把观测改到另一个物种下。
+
+    优先用 species_id（前端自动补全选中）；否则把 new_species_cn 先按别名/正名
+    解析到已有物种，避免「玄凤/玄凤鹦鹉」被存成两个物种；都查不到才新建。
+    """
+    if species_id:
+        sid = species_id
+        with conn_ctx(readonly=True) as con:
+            row = con.execute("SELECT common_name_cn FROM species WHERE id = ?",
+                              (sid,)).fetchone()
+            if not row:
+                return {"error": "species_not_found", "species_id": sid}
+            new_species_cn = row["common_name_cn"]
+    else:
+        new_species_cn = (new_species_cn or "").strip()
+        if not new_species_cn:
+            return {"error": "empty_species_name"}
+        sid = resolve_species_name(new_species_cn) or upsert_species(new_species_cn)
+        # 把用户的原始叫法登记为别名，下次同义输入直接归一
+        canonical = get_species_detail(sid)["species"]["common_name_cn"]
+        if new_species_cn != canonical:
+            add_alias(sid, new_species_cn, source="reassign")
+        new_species_cn = canonical
     with conn_ctx() as con:
         # 查新物种下是否已有同日观测，有则合并
         row = con.execute(

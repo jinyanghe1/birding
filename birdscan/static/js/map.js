@@ -1,10 +1,12 @@
 /* map.js — Leaflet 地图（OSM 优先，百度 fallback） */
 (function (B) {
   const { $, esc, apiJSON, imgUrl } = B;
-  let MAP = null, LAYER = null, TOKEN = 0, FIT_DONE = false;
+  let MAP = null, LAYER = null, TOKEN = 0, HOME = null;
 
   async function initMap() {
     if (MAP) { MAP.invalidateSize(); return; }
+    // 常住地决定默认视野（默认深圳，可在推荐页切换城市），不再硬编码中国全景
+    HOME = await apiJSON('config/home').catch(() => null);
     MAP = L.map('mapContainer', { zoomControl: true, attributionControl: true, worldCopyJump: true });
     const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors', maxZoom: 19, subdomains: ['a', 'b', 'c'],
@@ -22,8 +24,41 @@
     osm.addTo(MAP);
     LAYER = L.layerGroup().addTo(MAP);
     MAP.on('zoomend moveend', loadMap);
-    MAP.setView([34, 108], 4);
+    MAP.setView(HOME ? [HOME.lat, HOME.lon] : [22.5431, 114.0579], 11);
+    addMapControls();
     setTimeout(() => { MAP.invalidateSize(); loadMap(); }, 120);
+  }
+
+  /** 地图右上：定位 / 回常住地 / 全部观测 */
+  function addMapControls() {
+    const ctl = L.control({ position: 'topright' });
+    ctl.onAdd = function () {
+      const div = L.DomUtil.create('div', 'mapCtl');
+      div.innerHTML = `<button class="btn sm" id="btnLocate" title="浏览器定位">📍 定位</button>
+        <button class="btn sm" id="btnHome" title="回到常住地">🏠 ${esc(HOME ? HOME.city : '深圳')}</button>
+        <button class="btn sm" id="btnAll" title="缩放以显示全部观测点">全部观测</button>`;
+      L.DomEvent.disableClickPropagation(div);
+      return div;
+    };
+    ctl.addTo(MAP);
+    $('#btnLocate').onclick = locateMe;
+    $('#btnHome').onclick = () => HOME && MAP.setView([HOME.lat, HOME.lon], 11);
+    $('#btnAll').onclick = fitAll;
+  }
+
+  function locateMe() {
+    if (!navigator.geolocation) { B.toast('浏览器不支持定位', true); return; }
+    navigator.geolocation.getCurrentPosition((pos) => {
+      const { latitude, longitude } = pos.coords;
+      MAP.setView([latitude, longitude], 13);
+      L.circleMarker([latitude, longitude], { radius: 8, color: '#2f6fed' })
+        .addTo(MAP).bindTooltip('我的位置').openTooltip();
+    }, (err) => B.toast('定位失败：' + err.message, true), { timeout: 8000 });
+  }
+
+  async function fitAll() {
+    const pts = await apiJSON(`map?zoom=4&min_conf=${$('#mc').value}`).catch(() => []);
+    if (pts.length) MAP.fitBounds(L.latLngBounds(pts.map((p) => [p.lat, p.lon])).pad(0.25));
   }
 
   async function loadMap() {
@@ -55,10 +90,6 @@
       const m = L.marker([p.lat, p.lon], { icon }).addTo(LAYER);
       m.on('click', () => openCell(p, z));
     });
-    if (!FIT_DONE && pts.length) {
-      FIT_DONE = true;
-      MAP.fitBounds(L.latLngBounds(pts.map((p) => [p.lat, p.lon])).pad(0.25), { animate: false });
-    }
   }
 
   async function openCell(p, z) {
@@ -77,5 +108,6 @@
   }
 
   B.registerTab('map', { show: () => { initMap(); setTimeout(() => MAP && MAP.invalidateSize(), 60); } });
-  B.reloadMap = () => { FIT_DONE = false; loadMap(); };
+  B.reloadMap = () => { loadMap(); };
+  B.locateMe = locateMe;
 })(window.B);

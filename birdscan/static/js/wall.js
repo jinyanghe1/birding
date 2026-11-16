@@ -69,12 +69,15 @@
         `<img loading="lazy" src="${imgUrl(x.p.thumb_cache || x.p.image_path)}"
           title="${esc(x.o.obs_date)} ${esc(x.o.place_name || '')}" onclick="window.open(this.src)">`).join('')}</div>` : ''}
       <h2 style="margin-top:18px">观测记录</h2>
-      ${d.observations.map((o) => `<div class="obs" data-obs="${o.id}">
+      ${d.observations.map((o) => `<div class="obs" data-obs="${o.id}" data-name="${esc(s.common_name_cn)}">
         <span class="d">${esc(o.obs_date)}</span>
         <span class="p">${esc(o.place_name || '（无地点）')}</span>
         ${o.confidence != null ? `<span class="tiny"> 置信度 ${(o.confidence * 100).toFixed(0)}%</span>` : ''}
         ${o.notes ? `<div class="n">${esc(o.notes)}</div>` : ''}
-        <button class="btn sm danger" style="margin-top:6px" onclick="B.deleteObs(${o.id}, this)">删除此观测</button>
+        <div class="acts" style="margin-top:6px">
+          <button class="btn sm danger" onclick="B.deleteObs(${o.id}, this, B.afterObsChange)">删除</button>
+          <button class="btn sm" onclick="B.reassignObs(${o.id}, this, B.afterObsChange)">修正</button>
+        </div>
       </div>`).join('')}`);
   }
 
@@ -88,13 +91,9 @@
       `<a href="${links[k]}" target="_blank" rel="noopener">${esc(k)} ↗</a>`).join('')}</div>`;
   }
 
-  async function deleteObs(obsId, btn) {
-    if (!confirm('确认删除这条观测及其所有照片？')) return;
-    btn.disabled = true;
-    const r = await B.api('observation/' + obsId, { method: 'DELETE' }).then((x) => x.json());
-    btn.closest('.obs').style.opacity = '0.3';
-    btn.textContent = `已删除（${r.deleted_photos} 张照片）`;
-    setTimeout(() => { B.closeModal(); load(); }, 800);
+  /** 删除/修正后：关闭详情弹窗并刷新物种墙（共享逻辑在 review.js）。 */
+  function afterObsChange() {
+    setTimeout(() => { B.closeModal(); load(); }, 500);
   }
 
   const mc = () => $('#mc').value;
@@ -113,6 +112,6 @@
 
   B.registerTab('wall', { show: load });
   B.openSpecies = openSpecies;
-  B.deleteObs = deleteObs;
+  B.afterObsChange = afterObsChange;
   B.bindWall = bind;
 })(window.B);

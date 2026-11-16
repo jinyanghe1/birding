@@ -19,12 +19,24 @@
    → 不要再尝试「绕开 copy 直读数据库」等代码层方案，只能等用户在
      系统设置 → 隐私与安全性 → 完全磁盘访问权限 里授权，或在 GUI 会话下手动跑一次。
 
-## 数据质量：用 `species.in_china` 筛误识别（2026-09-03 新增）
-- `species.in_china` 取值：-1 未知 / 0 非中国 / 1 中国。
-- 生成任何识别报告时固定用 `in_china=0 AND confidence<0.45` 筛疑似误识别，比看名字判断靠谱。
-- 当前状态：516 观测 / 387 种，其中高置信(≥0.45)仅 68 条 37 种；
-  待复核 448 条 369 种，`in_china=0` 占 235 种 276 条（企鹅/蜂鸟/巨嘴鸟/几维等，全是误识别）。
-- 待复核积压已远超可信数据，恢复扫描后应优先复核而非继续堆新数据。
+## 数据质量：置信度阈值不可靠，必须逐张看图（2026-11-16 实测修正）
+
+- `species.in_china` 取值：-1 未知 / 0 非中国 / 1 中国。查询用它做筛选维度可以，
+  **但不能按阈值批量删数据**——2026-11-16 抽检证伪：
+  - `鹊鸲 conf=0.11` → 图里真是鹊鸲（低置信=真鸟）
+  - `加拿大黑雁 conf=0.41` → 识别正确
+  - `南美绿鹭 conf=0.03` → 是猪圈照片；`阿德利企鹅 conf=0.62` → 是人民大会堂
+  → 低置信里混真鸟、高置信里混建筑，阈值法两头都错。
+- **复核工具**：`scripts/review_batch.py`
+  - `export --bucket {high_conf_foreign|mid|low|all_foreign} [--limit N]` → 导出批次（默认按物种去重，每物种一张代表图）
+  - `apply --file decisions.json [--dry-run]`，decision 取值 `not_bird`（删）/`reassign`（改判）/`keep`（保留，可带 `note`）
+  - `store.annotate_observation(obs_id, note)` 把复核结论写进 `notes`，**不删数据不改物种**
+  - 判定原则：非鸟→删；鉴定明确错误→改判；**真鸟但是笼养/园养/宠物 → keep + note（动物园拍的也是真观测）**
+- 当前状态（2026-11-16 首批复核后）：**474 种 / 660 观测 / 1201 照片**；
+  高置信(≥0.45) 89 条 / 44 种；待复核 591 条（大多是 <0.20 噪声，夹着真鸟，需逐张看）。
+- 首批 16 条高置信误识别已处理：2 删（人民大会堂、公园湖景）、2 改判
+  （黑颈长脚鹬→黑翅长脚鹬、粉头斑鸠→灰斑鸠）、12 保留并标注（8 条动物园/笼养 + 4 条物种存疑）。
+- 剩余高置信但 in_china=0：**20 条**，是下一批目标。
 
 ## 已建立的 Python 环境
 - venv 路径：`/Users/hejinyang/.workbuddy/binaries/python/envs/birdskill`（Python 3.13.12）
@@ -43,31 +55,50 @@
 2. **必须先检测裁剪再分类**。整图直推会因为鸟占比太小而彻底失效。
 3. 权重在 `models/`，从 HF `Hakureirm/bird-id-models` 下载。
    该仓库 0 star、无 LICENSE 文件，只能当原型，不要对外分发。
-4. **置信度 ≥0.45 才可信**（`config.UI_MIN_CONF`）。<0.30 的 379 个物种基本是噪声，
-   数据库里保留但界面默认过滤，等具备多模态能力时复核。
+4. **置信度 ≥0.45 才可信**（`config.UI_MIN_CONF`）。但见上节：阈值只能做筛选，
+   不能做删除依据（<0.20 里也有真鸟）。界面默认过滤，复核靠 review_batch 逐张看图。
 5. 若将来换成多模态模型识别，走 `bird queue --take N --prompt` → 看图 →
    `bird apply result.json`，接口已经留好，与本地模型并存不冲突。
+6. **本会话（2026-11-16 起）具备读图能力**：可直接用 ViewImage 看 `data/thumbs/*.jpg`
+   复核识别结果，450px 缩略图足够判断大类/明显误识别，细节存疑时看 `image_path` 原图。
 
 ## 定时任务
-- launchd plist 已写好（`scripts/com.hejinyang.birdscan.plist`，plutil 校验通过），
-  但**本沙箱内 launchctl 注册被拦截**，需要用户在沙箱外手动 load。
-- 当前实际生效的是 WorkBuddy automation：`automation-1787917207670`（每天 21:00）。
+- **实际生效的是 launchd**（用户已在 GUI 手动 load `~/Library/LaunchAgents/com.hejinyang.birdscan.plist`）；
+  旧的 WorkBuddy automation `automation-1787917207670` 已不存在。
+- 2026-11-15 修复：plist 历史上直接跑 `birdscan/cli.py` 导致 09-29 起每天 ImportError；
+  现 cli.py 已硬化支持直接运行 + plist 改用 `-m birdscan.cli` 双保险。
+- **本沙箱内 launchctl bootstrap/print 均被拦截**（Bootstrap failed: 5），改 plist 后需用户在 GUI 终端手动重载。
 
-## 部署架构（2026-08-29 新增）
+## 部署架构（2026-11-15 更新：单用户回滚 + 每夜自动同步）
 
 **生产环境**：腾讯云轻量应用服务器（124.223.171.149）
 - **架构**：Nginx (80) → FastAPI (8765) → SQLite
 - **systemd 服务**：`/etc/systemd/system/birding.service`（自动重启）
-- **一键部署**：`./scripts/deploy_to_server.sh [--data]`
 - **访问地址**：http://124.223.171.149
 - **详细文档**：`docs/腾讯云部署指南.md`
+- **模型**：**单用户**（2026-11-15 回滚家庭共享）：匿名读 + X-API-Key 写；
+  users/albums/invites/groups/cloud_photos 等 6 表物理保留但代码不引用
+- **同步**：**本地为准、单向推服务器**。每晚 21:00 launchd 跑
+  `scripts/scan_daily.sh` 五步流水线：scan → 条件 auto → 本地快照（7份轮换）→
+  rsync（密钥 **`~/.ssh/birding_deploy`**）→ 服务器停服清 WAL 原子换库重启
+  （服务器备份轮换 7 份，DB 走 `birds.db.new` 暂存 + mv 原子换入）
+- **deploy_to_server.sh [--data]** 仍可用于手动全量部署；`--data` 直接覆盖服务器 DB
+  （回滚后无家庭数据顾虑，但注意会重置服务器备份文件名约定）
 - **控制台信息（Lighthouse MCP 已连接，2026-08-31 确认）**：
   - InstanceId `lhins-3jodviz2`，名称 Ubuntu-1GSt，地域 **ap-shanghai**（不是北京）
   - 套餐 bundle_starter_mc_promo_med2_01：2 核 2GB / 40GB SSD / 3Mbps，包年包月
   - 到期 2027-08-29，续费方式 NOTIFY_AND_MANUAL_RENEW
-  - 流量包：**200GB/月**（周期每月 29 日重置），实际用量 <30MB/月，无超额
+  - 流量包：**200GB/月**（周期每月 29 日重置），实际用量 <130MB/月，无超额
   - 控制台防火墙：只放行 22(SSH)/80(HTTP)/ICMP，与安全协议一致；实例内 ufw 未启用（不重复开）
-  - 快照：**无任何快照**，安全协议里「每天凌晨 3 点备份」尚未落地
+  - 服务器 thumbs 目录属主必须 **ubuntu**（曾误设 www-data 导致 rsync Permission denied）
+  - **快照**：`lhsnap-nywf1kf6`（2026-11-16 建，系统盘 40G，状态 NORMAL）——控制台级备份已落地
+  - **告警策略**（2026-11-16 建，绑定 lhins-3jodviz2）：CPU>85% 持续3周期(policy-05i85e3d)、
+    内存>85%(policy-xl0u5zsa)、流量包>90%(policy-6r9d0sdv)，均 1 小时通知一次
+  - **HTTPS 未落地**：账号下 0 个域名，大陆实例需先备案。落地清单见 `docs/HTTPS落地清单.md`
+
+**launchd 定时任务**：plist 现直接执行 `scripts/scan_daily.sh`（含全部五步），
+不再只跑 scan。**沙箱内 `launchctl bootstrap` 一律 Bootstrap error 5，只能用户在 GUI 终端装**：
+`launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.hejinyang.birdscan.plist`
 
 **本地开发**：localhost:8765
 - 扫描/识别/复核/手动导入都在本地做
@@ -95,9 +126,8 @@
 - e2e 测试已改读 `BIRDING_TEST_KEY` 环境变量（P0-1 闭环）。
 
 **服务器真实状态（SSH 必须带 `-i ~/Downloads/birding.pem`，沙箱不带 key 连不上）**：
-- ~~服务器代码 = 2026-09-01 部署~~ **✅ 2026-10-14 晚已全量更新**（10 个 commit，P0/P1 修复 + 前端重写），生产 E2E 7/7 通过。
-- **相册已有真实使用：4 用户（owner + 成员「妈妈」+ 2 个 pending 占位行）、4 相册、1 邀请码；cloud_photos=0**（上传链路 10-14 修复后首次跑通，测试数据已清理）。
-- **⚠️ `deploy --data` 会用本地库（users=1/albums=0）抹掉服务器家庭数据**——数据部署前必须先 SSH 备份 + 定合并策略。
+- ~~服务器代码 = 2026-09-01 部署~~ **✅ 2026-11-15 已回滚为单用户版**（家庭共享下线，详见部署架构节）
+- ~~⚠️ `deploy --data` 会抹掉服务器家庭数据~~ 回滚后无家庭数据，同步走 scan_daily.sh 流水线
 - 观测数据：本地 516/387（10-02），服务器 509/384（08-29）。
 - **服务器 venv 需 pillow**（10-14 补装；部署脚本不装依赖，环境漂移无感知——新增依赖要手动 ssh 装）。
 

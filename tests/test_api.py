@@ -120,19 +120,18 @@ def test_sharing_routes_are_gone(client):
 
 # ------------------------------------------------------------------ 写操作全链路（带 key）
 def test_delete_observation_with_key(client, key_headers, env):
-    _, db, _ = env
     from birdscan import store
     sid = store.upsert_species("白鹭")
     oid = store.add_observation(sid, "2026-11-15", "08:00", None, None,
                                 "测试地", None, None, 0.9, "test", None)
     r = client.delete(f"/api/observation/{oid}", headers=key_headers)
-    assert r.status_code == 200 and r.json()["ok"]
-    r = client.delete(f"/api/observation/{oid}", headers=key_headers)
-    assert r.status_code == 404, "重复删除应 404"
+    assert r.status_code == 200 and r.json()["deleted_obs"] == 1
+    # 再查该物种详情：观测已删
+    assert store.get_species_detail(sid)["count"] == 0
 
 
 def test_upload_with_key(client, key_headers, monkeypatch, env):
-    """手动上传：鉴权 + 识别入库 + 观测归属无用户概念。"""
+    """手动上传：鉴权 + 识别入库。"""
     _stub_classifier(monkeypatch)
     files = {"file": ("a.jpg", make_jpeg(), "image/jpeg")}
     r = client.post("/api/upload", headers=key_headers,
@@ -143,11 +142,10 @@ def test_upload_with_key(client, key_headers, monkeypatch, env):
     import sqlite3
     con = sqlite3.connect(env[1])
     row = con.execute(
-        "SELECT o.id, o.owner_id FROM observations o "
+        "SELECT o.id FROM observations o "
         "JOIN species s ON s.id=o.species_id WHERE s.common_name_cn='麻雀'"
     ).fetchone()
     assert row is not None, "上传应生成观测"
-    assert row[1] is None, "单用户模型：owner_id 不再写入"
     con.close()
 
 
@@ -159,10 +157,10 @@ def test_reassign_not_bird_with_key(client, key_headers, env):
     # 复核改判
     r = client.post("/api/review/reassign", headers=key_headers,
                     params={"obs_id": oid, "new_species_cn": "喜鹊"})
-    assert r.status_code == 200 and r.json()["ok"]
+    assert r.status_code == 200 and "new_species" in r.json()
     # 标记不是鸟（级联删除）
     oid2 = store.add_observation(sid, "2026-11-16", "09:00", None, None,
                                  "测试地", None, None, 0.1, "test", None)
     r = client.post("/api/review/not-bird", headers=key_headers,
                     params={"obs_id": oid2})
-    assert r.status_code == 200 and r.json()["ok"]
+    assert r.status_code == 200 and r.json()["deleted_obs"] == 1

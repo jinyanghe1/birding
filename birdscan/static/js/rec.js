@@ -55,6 +55,11 @@
     sel.onchange = () => { GEO = null; loadRecommendations(); };
     $('#recNameType').onchange = render;
     $('#recLocate').onclick = () => {
+      if (!window.isSecureContext) {
+        $('#recLocLabel').textContent = '当前 HTTP 页面不允许浏览器定位，请改用城市选择；HTTPS 开启后可定位。';
+        B.toast('HTTP 页面无法定位，请使用城市选择', true);
+        return;
+      }
       if (!navigator.geolocation) { B.toast('浏览器不支持定位', true); return; }
       $('#recLocLabel').textContent = '定位中…';
       navigator.geolocation.getCurrentPosition((pos) => {

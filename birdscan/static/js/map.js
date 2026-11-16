@@ -47,6 +47,10 @@
   }
 
   function locateMe() {
+    if (!window.isSecureContext) {
+      B.toast('当前 HTTP 页面不允许浏览器定位；HTTPS 开启后可用', true);
+      return;
+    }
     if (!navigator.geolocation) { B.toast('浏览器不支持定位', true); return; }
     navigator.geolocation.getCurrentPosition((pos) => {
       const { latitude, longitude } = pos.coords;

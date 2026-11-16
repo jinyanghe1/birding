@@ -183,6 +183,18 @@
 6. **Linux 权限链**：`www-data` 要读 `/home/ubuntu/...`，每一级目录都要 `chmod 755`
 7. **百度地图瓦片免 key**：`maponline{s}.bdimg.com/tile/?qt=tile&x={x}&y={y}&z={z}&styles=pl&scaler=1`
 
+## 2026-11-16 复核与地点功能
+- 复核页和物种详情均支持「删除 / 修正」：删除两次 confirm 后物理删观测与照片；
+  修正用统一物种自动补全，`species_aliases` 表把正名/别名/英文名/拉丁名归一到同一物种。
+- `birdscan/locations.py` 管理常住地：settings → 观测最多城市 → 默认深圳；
+  地图默认深圳，推荐支持城市/eBird region/浏览器经纬度，中文名用 eBird `sppLocale=zh_SIM`。
+- 种子脚本 `scripts/seed_species_data.py` 幂等维护常用别名和中文正名。
+- 浏览器回归：`tests/e2e_test.py` 覆盖双确认、别名修正、地图中心/定位、推荐城市/定位/中文名；
+  写请求在浏览器层拦截，真实删除由 pytest 临时库覆盖，避免 E2E 误删真实观测。
+- **GitHub 代理**：环境变量可能残留旧端口。2026-11-16 推送 502 时，环境里是 49899，
+  `scutil --proxy` 实际为 7897；已设 `git config --global http.https://github.com.proxy
+  http://127.0.0.1:7897` 并保留 GitHub HTTP/1.1。再遇 502 先对比这两处，不要盲目重试。
+
 ## 参考文档
 - 完整方案：`MVP开发方案.md`（含 DDL、模块规格、P0–P4 里程碑、风险清单）
 - 使用说明：`README.md`

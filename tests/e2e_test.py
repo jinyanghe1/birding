@@ -159,10 +159,15 @@ async def case_map_location():
         assert abs(center["lng"] - 114.0579) < 0.01
         assert await page.evaluate("window.__e2eMap.getZoom()") == 11
         await page.click("#btnLocate")
-        await page.wait_for_function("window.__e2eMap.getZoom() === 13")
-        assert await page.locator(".leaflet-tooltip").filter(has_text="我的位置").count() == 1
+        if await page.evaluate("window.isSecureContext"):
+            await page.wait_for_function("window.__e2eMap.getZoom() === 13")
+            assert await page.locator(".leaflet-tooltip").filter(has_text="我的位置").count() == 1
+            print("✅ 地图默认深圳 + 浏览器定位测试通过")
+        else:
+            await page.wait_for_function("document.querySelector('#toast')?.textContent.includes('HTTP')")
+            assert await page.evaluate("window.__e2eMap.getZoom()") == 11
+            print("✅ 地图默认深圳通过；公网 HTTP 定位限制提示通过")
         await browser.close()
-        print("✅ 地图默认深圳 + 浏览器定位测试通过")
 
 
 async def case_recommendation_location():
@@ -187,10 +192,15 @@ async def case_recommendation_location():
         cn_text = await page.locator("#recList").inner_text()
         assert any("\u4e00" <= c <= "\u9fff" for c in cn_text), "中文模式应显示中文名"
         await page.click("#recLocate")
-        await page.wait_for_function("document.querySelector('#recLocLabel').textContent.includes('50km')")
-        assert any("lat=22.5431" in u and "lon=114.0579" in u for u in urls)
+        if await page.evaluate("window.isSecureContext"):
+            await page.wait_for_function("document.querySelector('#recLocLabel').textContent.includes('50km')")
+            assert any("lat=22.5431" in u and "lon=114.0579" in u for u in urls)
+            print("✅ 推荐城市切换 + 浏览器定位 + 中文名测试通过")
+        else:
+            await page.wait_for_function("document.querySelector('#recLocLabel').textContent.includes('HTTP')")
+            assert "请改用城市选择" in await page.locator("#recLocLabel").inner_text()
+            print("✅ 推荐城市切换 + 中文名通过；公网 HTTP 定位提示通过")
         await browser.close()
-        print("✅ 推荐城市切换 + 浏览器定位 + 中文名测试通过")
 
 
 async def main():

@@ -5,7 +5,7 @@
 2. Tab 切换（6 个 tab，家庭相册已回滚）
 3. 删除二次确认 + 修正自动补全     —— 写请求全部拦截，不碰真实数据
 4. 地图默认常住地 + 浏览器定位
-5. 推荐城市切换 + 定位 + 中文名
+6. 全图预览：缩略图列表、按钮、原图加载、前后切换
 
 配置（环境变量）：
   BIRDING_BASE      目标站点（缺省 http://124.223.171.149；本地 http://127.0.0.1:8765）
@@ -89,6 +89,34 @@ async def case_tab_switch():
         assert n == 0, "albums tab 应已移除"
         await browser.close()
         print("✅ Tab 切换测试通过（6/6，无 albums）")
+
+
+async def case_fullsize_preview():
+    """列表只用小图；详情按钮加载独立全图，支持导航和关闭。"""
+    async with async_playwright() as p:
+        browser, page, errors = await _new_page(p)
+        await page.goto(BASE, timeout=30000)
+        await page.wait_for_function("document.querySelectorAll('#grid .card').length > 0")
+        first_src = await page.locator("#grid .card .ph").first.get_attribute("src")
+        assert "/full/" not in first_src, "物种墙不得直接加载全图"
+        await page.locator("#grid .card").first.click()
+        await page.locator("#modal .fullBtn").first.wait_for(timeout=15000)
+        await page.locator("#modal .fullBtn").first.click()
+        await page.wait_for_function("document.querySelector('#fullViewer')?.style.display === 'grid'")
+        await page.wait_for_function("document.querySelector('#fullImage')?.complete && document.querySelector('#fullImage').naturalWidth > 0")
+        src = await page.locator("#fullImage").get_attribute("src")
+        kind = await page.locator("#fullKind").inner_text()
+        assert "/full/" in src or "回退" in kind or "尚未同步" in kind
+        if "原始分辨率" in kind:
+            assert await page.locator("#fullImage").evaluate("im => im.naturalWidth") > 320
+        if await page.locator("#modal .fullBtn").count() > 1:
+            await page.locator("#fullNext").click()
+            assert "2/" in await page.locator("#fullMeta").inner_text()
+        await page.keyboard.press("Escape")
+        assert await page.locator("#fullViewer").evaluate("el => el.style.display") == "none"
+        assert not errors, f"控制台错误: {errors}"
+        await browser.close()
+        print("✅ 全图预览测试通过（列表小图、全图加载、导航、Esc 关闭）")
 
 
 async def case_review_actions():
@@ -232,6 +260,7 @@ async def main():
     await case_page_load()
     await case_wall_error_state()
     await case_tab_switch()
+    await case_fullsize_preview()
     await case_review_actions()
     await case_map_location()
     await case_recommendation_location()

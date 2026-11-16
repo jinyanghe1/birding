@@ -3,8 +3,8 @@
 #   1. 扫描 Photos 增量
 #   2. 识别队列非空时跑 auto
 #   3. 本地 DB 快照备份（保留 7 份）
-#   4. rsync 单向同步到服务器（DB 快照 + 缩略图增量）
-#   5. 服务器：停服 → 备份轮换 → 原子换库 → 起服
+#   4. 准备本地全图（不下载 iCloud），rsync DB/缩略图/全图
+#   5. 服务器：停服、清 WAL、备份、原子换库、重启
 # 设计原则：scan 是核心资产，sync 失败只记日志不失败。
 set -uo pipefail   # 不用 -e：auto/sync 失败不能炸掉扫描链路
 
@@ -37,24 +37,32 @@ else
   echo "[$(ts)] id_queue 空，跳过 auto" >> "$LOG"
 fi
 
-# 3. 本地安全快照（sqlite backup API，即使本地 web 正在写也一致）
+# 3. 全图增量：只复制 Mac 本地原图；iCloud-only 使用已有衍生图，绝不后台下载。
+"$PY" -m birdscan.cli fullsize >> "$LOG" 2>&1 \
+  || echo "[$(ts)] !! fullsize failed（非致命，继续同步其他数据）" >> "$LOG"
+
+# 4. 本地安全快照（sqlite backup API，即使本地 web 正在写也一致）
 SNAP=$ROOT/data/birds.db.snapshot
 "$PY" -c "import sqlite3; s=sqlite3.connect('$ROOT/data/birds.db'); d=sqlite3.connect('$SNAP'); s.backup(d); d.close(); s.close()" \
   >> "$LOG" 2>&1 || { echo "[$(ts)] !! 本地快照失败（非致命），跳过同步" >> "$LOG"; exit 0; }
 cp "$SNAP" "$ROOT/data/birds.db.bak.nightly.$(date +%Y%m%d)"
 ls -t "$ROOT"/data/birds.db.bak.nightly.* 2>/dev/null | tail -n +8 | xargs rm -f 2>/dev/null
 
-# 4. rsync：DB 快照 + 缩略图增量（不加 --delete，孤儿缩略图无害）
+# 5. rsync：全图和缩略图先于 DB 到位，避免新详情页短暂指向未上传的大图。
 rsync -az --partial --timeout=300 \
   -e "ssh -i $KEY -o BatchMode=yes -o ConnectTimeout=15" \
-  "$SNAP" "$SRV:$REMOTE_DATA/birds.db.new" >> "$LOG" 2>&1 \
-  || { echo "[$(ts)] !! DB rsync failed（非致命）" >> "$LOG"; exit 0; }
+  "$ROOT/data/full/" "$SRV:$REMOTE_DATA/full/" >> "$LOG" 2>&1 \
+  || echo "[$(ts)] !! full rsync failed（非致命）" >> "$LOG"
 rsync -az --partial --timeout=300 \
   -e "ssh -i $KEY -o BatchMode=yes -o ConnectTimeout=15" \
   "$ROOT/data/thumbs/" "$SRV:$REMOTE_DATA/thumbs/" >> "$LOG" 2>&1 \
   || echo "[$(ts)] !! thumbs rsync failed（非致命）" >> "$LOG"
+rsync -az --partial --timeout=300 \
+  -e "ssh -i $KEY -o BatchMode=yes -o ConnectTimeout=15" \
+  "$SNAP" "$SRV:$REMOTE_DATA/birds.db.new" >> "$LOG" 2>&1 \
+  || { echo "[$(ts)] !! DB rsync failed（非致命）" >> "$LOG"; exit 0; }
 
-# 5. 服务器：停服（WAL 落盘）→ 清 WAL 残留 → 备份轮换 → 原子换库 → 起服
+# 6. 服务器：停服（WAL 落盘）→ 清 WAL 残留 → 备份轮换 → 原子换库 → 起服
 #    （zsh 不做变量分词，ssh 参数必须逐个传）
 ssh -i "$KEY" -o BatchMode=yes -o ConnectTimeout=15 "$SRV" '
   set -e

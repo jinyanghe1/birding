@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
 DB_PATH = DATA_DIR / "birds.db"
 THUMB_DIR = DATA_DIR / "thumbs"
+FULL_DIR = DATA_DIR / "full"
 FRAME_DIR = DATA_DIR / "frames"
 CHECKLIST_CSV = DATA_DIR / "china_bird_list_v10.csv"
 MODEL_DIR = ROOT / "models"

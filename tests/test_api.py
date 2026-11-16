@@ -33,6 +33,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.delenv("BIRDING_API_KEY", raising=False)
     monkeypatch.setattr(config, "DB_PATH", db)
     monkeypatch.setattr(config, "DATA_DIR", data)
+    monkeypatch.setattr(config, "FULL_DIR", data / "full")
     monkeypatch.setattr(web, "IMPORT_DIR", data / "imports")
     monkeypatch.setattr(auth, "API_KEY", TEST_KEY)
     (data / ".api_key").write_text(TEST_KEY)
@@ -196,3 +197,30 @@ def test_annotate_observation_keeps_data(env):
 
     # 不存在的观测：返回 not_found 而不抛异常
     assert store.annotate_observation(999999, "x").get("ok") is False
+
+
+# ------------------------------------------------------------------ 全图预览
+def test_fullsize_route_and_species_metadata(client, env):
+    """大图单独访问；详情明确区分原图和衍生图。"""
+    from birdscan import store
+    full = env[2] / "full"
+    full.mkdir()
+    (full / "ABC-123.jpg").write_bytes(make_jpeg(size=(1600, 1200)))
+    sid = store.upsert_species("白鹭")
+    oid = store.add_observation(sid, "2026-11-16", "08:00", None, None,
+                                "深圳湾", None, None, 0.9, "test", None)
+    store.upsert_photo("ABC-123", obs_id=oid, media_type="image",
+                       full_path=str(full / "ABC-123.jpg"), full_kind="original",
+                       full_width=1600, full_height=1200)
+
+    r = client.get("/full/ABC-123.jpg")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("image/jpeg")
+    assert len(r.content) > 100
+    assert client.get("/full/missing.jpg").status_code == 404
+    assert client.get("/full/%2E%2E%2Fbirds.db").status_code == 404
+
+    p = store.get_species_detail(sid)["observations"][0]["photos"][0]
+    assert p["full_url"] == "/full/ABC-123.jpg"
+    assert p["full_kind"] == "original"
+    assert (p["full_width"], p["full_height"]) == (1600, 1200)

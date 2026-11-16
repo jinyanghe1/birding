@@ -79,6 +79,10 @@ CREATE TABLE IF NOT EXISTS photos (
   image_source      TEXT,
   image_path        TEXT,
   thumb_cache       TEXT,
+  full_path         TEXT,
+  full_kind         TEXT,
+  full_width        INTEGER,
+  full_height       INTEGER,
   width             INTEGER,
   height            INTEGER,
   sharpness         REAL,
@@ -162,7 +166,9 @@ _EXTRA_COLS = {
                 ("in_china", "INTEGER DEFAULT -1"), ("inat_id", "INTEGER"),
                 ("gbif_key", "INTEGER"), ("wikipedia_url", "TEXT"),
                 ("summary", "TEXT"), ("links_json", "TEXT")],
-    "photos": [("thumb_cache", "TEXT")],
+    "photos": [("thumb_cache", "TEXT"), ("full_path", "TEXT"),
+               ("full_kind", "TEXT"), ("full_width", "INTEGER"),
+               ("full_height", "INTEGER")],
 }
 
 
@@ -322,6 +328,17 @@ def upsert_photo(asset_uuid: str, **fields) -> int:
             "SELECT id FROM photos WHERE asset_uuid = ?", (asset_uuid,)
         ).fetchone()
         return row["id"]
+
+
+def update_photo_fullsize(asset_uuid: str, full_path: str, full_kind: str,
+                          full_width: int, full_height: int) -> None:
+    """登记独立全图；缩略图字段保持不变。"""
+    with conn_ctx() as con:
+        con.execute(
+            """UPDATE photos SET full_path=?, full_kind=?, full_width=?, full_height=?
+               WHERE asset_uuid=?""",
+            (full_path, full_kind, full_width, full_height, asset_uuid),
+        )
 
 
 def mark_scanned(uuid: str, stage: str, reason: str | None = None,
@@ -532,6 +549,11 @@ def get_species_detail(species_id: int) -> dict | None:
                     v = pd.get(k)
                     if v and "/thumbs/" in str(v):
                         pd[k] = "thumbs/" + Path(v).name
+                if pd.get("full_path"):
+                    from urllib.parse import quote
+                    pd["full_url"] = "/full/" + quote(Path(pd["full_path"]).name)
+                else:
+                    pd["full_url"] = None
                 photos.append(pd)
             d["photos"] = photos
             out_obs.append(d)

@@ -1,6 +1,6 @@
 // Service Worker：静态资源网络优先，离线时才回退缓存。
 // 版本必须随缓存策略/资源清单变化更新，避免旧浏览器一直运行过期 JS。
-const CACHE = 'birding-v3-20261116';
+const CACHE = 'birding-v4-20261116';
 const STATIC = [
   '/', '/manifest.json',
   '/static/css/app.css',
@@ -28,7 +28,8 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   // API、图片和第三方资源不由 SW 拦截。
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api/') ||
-      url.pathname.startsWith('/img') || url.pathname.startsWith('/thumbs/')) return;
+      url.pathname.startsWith('/img') || url.pathname.startsWith('/thumbs/') ||
+      url.pathname.startsWith('/full/')) return;
 
   // 在线时永远先取最新版本；网络失败才用缓存，兼顾更新与离线外壳。
   e.respondWith(

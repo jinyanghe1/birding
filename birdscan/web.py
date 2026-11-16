@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -93,6 +94,22 @@ def img(path: str = Query(...)):
     elif rp.suffix.lower() in (".heic", ".heif"):
         media = "image/heic"
     return FileResponse(rp, media_type=media)
+
+
+@app.get("/full/{filename}")
+def full_image(filename: str):
+    """独立全图路由；只接受导出生成的安全文件名，不能读取任意路径。"""
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}\.(?:jpg|jpeg|png|webp)", filename):
+        raise HTTPException(404, "图片不可访问")
+    root = Path(config.FULL_DIR).resolve()
+    path = (root / filename).resolve()
+    try:
+        path.relative_to(root)
+    except ValueError:
+        raise HTTPException(404, "图片不可访问")
+    if not path.is_file():
+        raise HTTPException(404, "全图尚未同步")
+    return FileResponse(path, headers={"Cache-Control": "no-cache"})
 
 
 # ------------------------------------------------------------------ API（读：匿名开放）

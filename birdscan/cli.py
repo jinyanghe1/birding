@@ -224,6 +224,14 @@ def cmd_serve(a) -> int:
     return 0
 
 
+def cmd_fullsize(a) -> int:
+    """准备全尺寸网页预览；只复制本地已有文件，不下载 iCloud。"""
+    from . import fullsize
+    out = fullsize.prepare_fullsize(limit=a.limit, force=a.force)
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return 0 if not out["errors"] else 1
+
+
 def cmd_probe(a) -> int:
     """只读探针：打印照片库画像，不做任何写入。"""
     from . import photos as ph
@@ -263,6 +271,11 @@ def main(argv=None) -> int:
 
     s = sub.add_parser("probe", help="只读探针：照片库画像")
     s.set_defaults(fn=cmd_probe)
+
+    s = sub.add_parser("fullsize", help="准备全图（仅本地文件，不下载 iCloud）")
+    s.add_argument("--limit", type=int, help="只处理前 N 张关联照片")
+    s.add_argument("--force", action="store_true", help="重新生成已有全图")
+    s.set_defaults(fn=cmd_fullsize)
 
     s = sub.add_parser("scan", help="扫描照片库（L0+L1+L2）")
     s.add_argument("--limit", type=int, help="只处理前 N 张")

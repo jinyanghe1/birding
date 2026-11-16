@@ -2,6 +2,8 @@
 (function (B) {
   const { $, esc, apiJSON, openModal, imgUrl } = B;
   let ALL = [];
+  let FULLS = [];
+  let fullIndex = 0;
 
   async function load() {
     const g = $('#grid');
@@ -73,9 +75,13 @@
       </div>` : ''}
       <div style="margin:12px 0" class="tiny">共 <b style="color:var(--amber)">${d.count}</b> 次观测
         ${d.places.length ? ' · 地点：' + d.places.slice(0, 6).map(esc).join('、') : ''}</div>
-      ${photos.length ? `<div class="gal">${photos.slice(0, 24).map((x) =>
-        `<img loading="lazy" src="${imgUrl(x.p.thumb_cache || x.p.image_path)}"
-          title="${esc(x.o.obs_date)} ${esc(x.o.place_name || '')}" onclick="window.open(this.src)">`).join('')}</div>` : ''}
+      ${photos.length ? `<div class="gal">${photos.slice(0, 24).map((x, i) =>
+        `<div class="galItem">
+          <img loading="lazy" src="${imgUrl(x.p.thumb_cache || x.p.image_path)}"
+            title="${esc(x.o.obs_date)} ${esc(x.o.place_name || '')}"
+            data-full-index="${i}" tabindex="0" role="button" aria-label="预览全图">
+          <button class="btn sm fullBtn" data-full-index="${i}">预览全图</button>
+        </div>`).join('')}</div>` : ''}
       <h2 style="margin-top:18px">观测记录</h2>
       ${d.observations.map((o) => `<div class="obs" data-obs="${o.id}" data-name="${esc(s.common_name_cn)}">
         <span class="d">${esc(o.obs_date)}</span>
@@ -87,6 +93,74 @@
           <button class="btn sm" onclick="B.reassignObs(${o.id}, this, B.afterObsChange)">修正</button>
         </div>
       </div>`).join('')}`);
+    FULLS = photos.slice(0, 24);
+    document.querySelectorAll('[data-full-index]').forEach((el) => {
+      el.onclick = () => openFull(Number(el.dataset.fullIndex));
+      if (el.tagName === 'IMG') el.onkeydown = (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFull(Number(el.dataset.fullIndex)); }
+      };
+    });
+  }
+
+  function fullKindLabel(p) {
+    if (p.full_kind === 'original') return '原始分辨率';
+    if (p.full_kind === 'frame') return '视频抽帧';
+    if (p.full_kind === 'derivative') return '本地最清晰衍生图 · 原图仅在 iCloud';
+    return '全图尚未同步，当前显示缩略图';
+  }
+
+  function openFull(index) {
+    if (!FULLS.length) return;
+    fullIndex = (index + FULLS.length) % FULLS.length;
+    const { p, o } = FULLS[fullIndex];
+    const thumb = imgUrl(p.thumb_cache || p.image_path);
+    const src = p.full_url || thumb;
+    let box = $('#fullViewer');
+    if (!box) {
+      document.body.insertAdjacentHTML('beforeend', `<div id="fullViewer" class="fullViewer" role="dialog" aria-modal="true" aria-label="全图预览">
+        <div class="fullShade" data-full-close></div>
+        <div class="fullTop"><span id="fullMeta"></span><button class="fullClose" data-full-close aria-label="关闭全图">×</button></div>
+        <button class="fullNav prev" id="fullPrev" aria-label="上一张">‹</button>
+        <div class="fullStage"><img id="fullImage" alt="鸟类全图"><div class="fullLoading" id="fullLoading">正在加载全图…</div></div>
+        <button class="fullNav next" id="fullNext" aria-label="下一张">›</button>
+        <div class="fullFoot"><span id="fullKind"></span><a id="fullNewTab" target="_blank" rel="noopener">新窗口打开 ↗</a></div>
+      </div>`);
+      box = $('#fullViewer');
+      box.querySelectorAll('[data-full-close]').forEach((el) => { el.onclick = closeFull; });
+      $('#fullPrev').onclick = () => renderFull(fullIndex - 1);
+      $('#fullNext').onclick = () => renderFull(fullIndex + 1);
+    }
+    box.style.display = 'grid';
+    document.body.classList.add('fullOpen');
+    renderFull(fullIndex, thumb);
+    $('.fullClose').focus();
+  }
+
+  function renderFull(index, knownThumb) {
+    fullIndex = (index + FULLS.length) % FULLS.length;
+    const { p, o } = FULLS[fullIndex];
+    const im = $('#fullImage');
+    const loading = $('#fullLoading');
+    const thumb = knownThumb || imgUrl(p.thumb_cache || p.image_path);
+    loading.style.display = 'block';
+    $('#fullMeta').textContent = `${o.obs_date || ''} · ${o.place_name || '无地点'} · ${fullIndex + 1}/${FULLS.length}`;
+    $('#fullKind').textContent = fullKindLabel(p) +
+      (p.full_width ? ` · ${p.full_width}×${p.full_height}` : '');
+    $('#fullNewTab').href = p.full_url || thumb;
+    im.onerror = () => {
+      im.onerror = null;
+      im.src = thumb;
+      loading.style.display = 'none';
+      $('#fullKind').textContent = '全图加载失败，已回退到缩略图';
+    };
+    im.onload = () => { loading.style.display = 'none'; };
+    im.src = p.full_url || thumb;
+  }
+
+  function closeFull() {
+    const box = $('#fullViewer');
+    if (box) box.style.display = 'none';
+    document.body.classList.remove('fullOpen');
   }
 
   function extLinksHtml(lj) {
@@ -121,6 +195,17 @@
   B.registerTab('wall', { show: load });
   B.loadWall = load;
   B.openSpecies = openSpecies;
+  B.openFull = openFull;
+  document.addEventListener('keydown', (e) => {
+    const box = $('#fullViewer');
+    if (!box || box.style.display === 'none') return;
+    if (e.key === 'Escape') closeFull();
+    else if (e.key === 'ArrowLeft') renderFull(fullIndex - 1);
+    else if (e.key === 'ArrowRight') renderFull(fullIndex + 1);
+    else return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }, true);
   B.afterObsChange = afterObsChange;
   B.bindWall = bind;
 })(window.B);

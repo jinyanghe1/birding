@@ -4,7 +4,7 @@
 本地观鸟数据库（"本地懂鸟"）：扫描 macOS Photos → 自动发现新增鸟类照片/视频 → 去重 → 挑清晰图 → 识别鸟种 → 入库（鸟种/图片/时间/地点/次数）→ localhost 网页浏览 + 封装成 Agent Skill。双端（Web + Skill）共用同一个 SQLite。
 
 ## 硬约束（来自本机实测，改方案前必读）
-1. **只能用本地缩略图 `p.path_derivatives`**，绝不能调用 `export(use_photos_export=True)` —— 89% 原图在 iCloud，强行下载会在 launchd 无 GUI 会话下卡死。
+1. **扫描/识别只用本地缩略图 `p.path_derivatives`**，绝不能调用 `export(use_photos_export=True)` —— 89% 原图在 iCloud，强行下载会在 launchd 无 GUI 会话下卡死。全图同步是独立例外：只复制已在本地的 `p.path`，iCloud-only 回退衍生图，不触发下载。
 2. **连拍分组必须自建**：Photos 的 `burst` 标记实际只有 3/15,413 张，等于没有。用「时间戳间隔 ≤2s 分组 + pHash 汉明距离 ≤6 去重」。
 3. **不能依赖 Photos 的系统标签**：`labels_normalized` 全为 0。
 4. **DB schema 是 `ZASSET`**（不是老教程里的 `ZGENERICASSET`），裸写 SQL 时注意。
@@ -79,8 +79,8 @@
 - **模型**：**单用户**（2026-11-15 回滚家庭共享）：匿名读 + X-API-Key 写；
   users/albums/invites/groups/cloud_photos 等 6 表物理保留但代码不引用
 - **同步**：**本地为准、单向推服务器**。每晚 21:00 launchd 跑
-  `scripts/scan_daily.sh` 五步流水线：scan → 条件 auto → 本地快照（7份轮换）→
-  rsync（密钥 **`~/.ssh/birding_deploy`**）→ 服务器停服清 WAL 原子换库重启
+  `scripts/scan_daily.sh` 六步流水线：scan → 条件 auto → fullsize 全图增量 → 本地快照（7份轮换）→
+  rsync full/thumbs/DB（密钥 **`~/.ssh/birding_deploy`**）→ 服务器停服清 WAL 原子换库重启
   （服务器备份轮换 7 份，DB 走 `birds.db.new` 暂存 + mv 原子换入）
 - **deploy_to_server.sh [--data]** 仍可用于手动全量部署；`--data` 直接覆盖服务器 DB
   （回滚后无家庭数据顾虑，但注意会重置服务器备份文件名约定）
@@ -96,7 +96,12 @@
     内存>85%(policy-xl0u5zsa)、流量包>90%(policy-6r9d0sdv)，均 1 小时通知一次
   - **HTTPS 未落地**：账号下 0 个域名，大陆实例需先备案。落地清单见 `docs/HTTPS落地清单.md`
 
-**launchd 定时任务**：plist 现直接执行 `scripts/scan_daily.sh`（含全部五步），
+**全图预览（2026-11-16 上线）**：`data/full/` 1201 张/3.3GB；original 546、derivative 602、frame 53。
+列表仍 320px 缩略图，详情“预览全图”走 `/full/{filename}`。JPEG/MPO 必须字节直拷；HEIC 用 sips
+转全分辨率 JPEG；视频帧 UUID 含 `#fN`，输出文件名安全哈希。iCloud-only 不下载且明确标注衍生图。
+提交 `31c41d0`；pytest 30/30，生产全图浏览器流程通过。
+
+**launchd 定时任务**：plist 现直接执行 `scripts/scan_daily.sh`（含全部六步），
 不再只跑 scan。**沙箱内 `launchctl bootstrap` 一律 Bootstrap error 5，只能用户在 GUI 终端装**：
 `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.hejinyang.birdscan.plist`
 

@@ -837,6 +837,26 @@ def mark_not_bird(obs_id: int) -> dict:
     return delete_observation(obs_id)
 
 
+def annotate_observation(obs_id: int, note: str) -> dict:
+    """给观测追加复核备注（不改物种、不删数据）。
+
+    用于复核时记录「笼养/园养」「物种存疑」等人工判断，
+    让数据可追溯，同时避免误删真实拍摄的鸟。
+    """
+    stamp = datetime.now(config.LOCAL_TZ).strftime("%Y-%m-%d")
+    tag = f"[{stamp} 复核] {note}"
+    with conn_ctx() as con:
+        row = con.execute("SELECT notes FROM observations WHERE id = ?",
+                          (obs_id,)).fetchone()
+        if not row:
+            return {"ok": False, "reason": "not_found"}
+        old = row["notes"] or ""
+        merged = (old + " | " + tag).strip(" |")
+        con.execute("UPDATE observations SET notes = ? WHERE id = ?",
+                    (merged, obs_id))
+    return {"annotated": obs_id, "note": tag}
+
+
 def reassign_species(obs_id: int, new_species_cn: str) -> dict:
     """标记「分类错误」：把观测改到另一个物种下。"""
     sid = upsert_species(new_species_cn)

@@ -164,3 +164,27 @@ def test_reassign_not_bird_with_key(client, key_headers, env):
     r = client.post("/api/review/not-bird", headers=key_headers,
                     params={"obs_id": oid2})
     assert r.status_code == 200 and r.json()["deleted_obs"] == 1
+
+
+# ------------------------------------------------------- 复核备注（review_batch 用）
+def test_annotate_observation_keeps_data(env):
+    """复核备注只追加 notes，不改物种、不删数据（笼养/存疑场景专用）。"""
+    from birdscan import store
+    sid = store.upsert_species("埃及雁")
+    oid = store.add_observation(sid, "2026-11-15", "08:00", None, None,
+                                "测试地", None, None, 0.6, "test", "原备注")
+    out = store.annotate_observation(oid, "公园水域，疑园养个体")
+    assert out["annotated"] == oid
+
+    detail = store.get_species_detail(sid)
+    assert detail["count"] == 1, "备注不得删除观测"
+    note = detail["observations"][0]["notes"]
+    assert "原备注" in note and "复核" in note and "园养" in note
+
+    # 二次备注累加而非覆盖
+    store.annotate_observation(oid, "二次复核")
+    note2 = store.get_species_detail(sid)["observations"][0]["notes"]
+    assert note2.count("复核]") >= 2
+
+    # 不存在的观测：返回 not_found 而不抛异常
+    assert store.annotate_observation(999999, "x").get("ok") is False
